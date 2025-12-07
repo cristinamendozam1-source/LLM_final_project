@@ -175,8 +175,7 @@ def markdown_to_docx(md_text: str, filename: str) -> str:
 # ---------------------------------------------------------
 # Deterministic CV Parser (No LLM)
 # ---------------------------------------------------------
-    
-  def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
+def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
     """
     Deterministic parser: group bullets under the employer header that precedes them.
 
