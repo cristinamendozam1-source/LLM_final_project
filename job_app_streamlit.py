@@ -169,24 +169,14 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
     """Create the multi-agent system with step-by-step workflow"""
     
     # Initialize tools - use FileReadTool for structured text
-    cv_read_tool = FileReadTool(file_path=cv_text_path)
-    job_read_tool = FileReadTool(file_path=job_desc_path)
+    try:
+        cv_read_tool = FileReadTool(file_path=cv_text_path)
+        job_read_tool = FileReadTool(file_path=job_desc_path)
+    except Exception as e:
+        st.error(f"Error initializing file reading tools: {str(e)}")
+        raise
     
     # STEP 1: Information Extraction Agents
-    job_description_analyzer = Agent(
-        role="Job Description Analyzer",
-        goal=(
-            "Carefully read the job description to extract two things: 1) a structured list of job "
-            "responsibilities and 2) a structured list of required skills and qualifications."
-        ),
-        tools=[job_read_tool],
-        verbose=True,
-        backstory=(
-            "You are an expert in deconstructing job postings. Your keen eye for detail lets you "
-            "separate responsibilities from requirements so that other agents can act on your insights. "
-            "Always organize information clearly and concisely."
-        )
-    )
     job_description_analyzer = Agent(
         role="Job Description Analyzer",
         goal=(
@@ -194,12 +184,12 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
             "1) List of responsibilities, 2) Required skills and qualifications, "
             "3) Company culture indicators, 4) Experience level requirements."
         ),
-        tools=[semantic_mdx],
+        tools=[job_read_tool],
         verbose=True,
         backstory=(
-            "You are an expert in parsing job postings with precision. You use "
-            "semantic search and embeddings to identify and categorize job requirements "
-            "accurately. You structure information for downstream analysis."
+            "You are an expert in deconstructing job postings. Your keen eye for detail lets you "
+            "separate responsibilities from requirements so that other agents can act on your insights. "
+            "Always organize information clearly and concisely."
         )
     )
     
@@ -916,7 +906,6 @@ def main():
             "📋 Fit Assessment",
             "📄 Revised CV",
             "✉️ Cover Letter",
-            "✅ QA Report",
             "💾 Download All"
         ])
         
@@ -973,11 +962,8 @@ def main():
                 mime="text/markdown"
             )
         
-        with tab4:
-            st.markdown("### Quality Assurance Report")
-            st.markdown(st.session_state.results.get('qa_report', 'No QA report available'))
         
-        with tab5:
+        with tab4:
             st.markdown("### Download All Documents")
             
             # Create combined document with proper assessment
@@ -986,10 +972,6 @@ def main():
 ## Fit Assessment
 {assessment}
 
----
-
-## Quality Assurance Report
-{st.session_state.results.get('qa_report', 'No QA report available')}
 
 ---
 
