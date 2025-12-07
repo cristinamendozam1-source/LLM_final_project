@@ -181,12 +181,14 @@ def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
     Works best for CVs like:
 
     EXPERIENCE
-    Instiglio – Consulting firm in international development
-    Senior Associate, Nairobi, Kenya March 2024 – June 2024
+    Dalberg Advisors – Social impact consulting firm
+    Postgraduate Intern, Mumbai, India
+    June 2025 – Aug. 2025
     • Bullet 1
     • Bullet 2
     ...
     """
+
     lines = [l.strip() for l in cv_text.split("\n") if l.strip()]
     structured = {
         "positions": [],
@@ -197,11 +199,15 @@ def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
     current_section = None
     current_pos = None
 
+    # Simple month list to help detect date-only lines
+    months = ["jan", "feb", "mar", "apr", "may", "jun", "jul",
+              "aug", "sep", "oct", "nov", "dec"]
+
     for line in lines:
         upper = line.upper()
 
-        # Section detection
-        if upper.startswith("EXPERIENCE"):
+        # -------- Section detection --------
+        if upper.startswith("EXPERIENCE") or "PROFESSIONAL EXPERIENCE" in upper:
             current_section = "experience"
             continue
         if upper.startswith("EDUCATION"):
@@ -211,45 +217,78 @@ def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
             current_section = "skills"
             continue
 
+        # -------- EXPERIENCE SECTION --------
         if current_section == "experience":
-            # New employer line heuristic: has a dash and not a bullet
-            if not line.startswith("•") and ("–" in line or " - " in line):
-                # Finish previous position
-                if current_pos is not None:
-                    structured["positions"].append(current_pos)
-                # Start new
-                current_pos = {
-                    "employer": line,
-                    "title": "",
-                    "dates": "",
-                    "location": "",
-                    "responsibilities": []
-                }
-                continue
+            # 1) New employer line heuristic:
+            #    - not a bullet
+            #    - either contains an en dash / hyphen OR has no digits and looks like a heading
+            if not line.startswith("•"):
+                is_heading_with_dash = ("–" in line or " - " in line)
+                looks_like_org = (
+                    not any(ch.isdigit() for ch in line) and
+                    len(line.split()) <= 10 and
+                    line[0].isupper()
+                )
+                if is_heading_with_dash or looks_like_org:
+                    # Finish previous position
+                    if current_pos is not None:
+                        structured["positions"].append(current_pos)
+                    # Start new employer
+                    current_pos = {
+                        "employer": line,
+                        "title": "",
+                        "dates": "",
+                        "location": "",
+                        "responsibilities": []
+                    }
+                    continue
 
-            # Title/dates line: first non-bullet after employer
+            # 2) Date-only line (e.g., "June 2025 – Aug. 2025")
+            if current_pos is not None and not line.startswith("•"):
+                lower_line = line.lower()
+                has_year = re.search(r"\d{4}", lower_line) is not None
+                has_month = any(m in lower_line for m in months)
+                if current_pos["dates"] == "" and has_year and has_month:
+                    current_pos["dates"] = line
+                    continue
+
+            # 3) Title line (first non-bullet, non-date line after employer)
             if current_pos is not None and not line.startswith("•") and current_pos["title"] == "":
                 current_pos["title"] = line
+                # sometimes dates are on same line as title (we try to capture them too)
                 m = re.search(r"(\d{4}.*)$", line)
-                if m:
+                if m and current_pos["dates"] == "":
                     current_pos["dates"] = m.group(1).strip()
                 continue
 
-            # Bullet line
+            # 4) Bullet line: real responsibilities
             if current_pos is not None and line.startswith("•"):
                 bullet = line.lstrip("•").strip()
-                if bullet:
-                    current_pos["responsibilities"].append(bullet)
+
+                # Ignore placeholder bullets like "Responsibilities to be detailed."
+                if not bullet:
+                    continue
+                if "responsibilities to be detailed" in bullet.lower():
+                    continue
+
+                current_pos["responsibilities"].append(bullet)
                 continue
 
-            # Continuation line for last bullet
+            # 5) Continuation lines for last bullet (but avoid swallowing dates)
             if current_pos is not None and current_pos["responsibilities"]:
-                current_pos["responsibilities"][-1] += " " + line
-                continue
+                lower_line = line.lower()
+                has_year = re.search(r"\d{4}", lower_line) is not None
+                has_month = any(m in lower_line for m in months)
+                # If it looks like a date line, don't append it to the bullet
+                if not (has_year and has_month):
+                    current_pos["responsibilities"][-1] += " " + line
+                    continue
 
+        # -------- EDUCATION SECTION --------
         elif current_section == "education":
             structured["education"].append(line)
 
+        # -------- SKILLS SECTION --------
         elif current_section == "skills":
             raw_pieces = re.split(r"[|,]", line)
             for p in raw_pieces:
