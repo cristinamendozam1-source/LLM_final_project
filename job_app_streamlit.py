@@ -5,6 +5,7 @@ from pathlib import Path
 import json
 from typing import Dict, List, Tuple
 import PyPDF2
+import docx  # For Word documents
 from crewai import Agent, Task, Crew
 from crewai_tools import MDXSearchTool, FileReadTool
 import warnings
@@ -79,6 +80,39 @@ def extract_text_from_pdf(pdf_path: str) -> str:
         st.error(f"Error reading PDF: {str(e)}")
         return ""
 
+def extract_text_from_docx(docx_path: str) -> str:
+    """
+    Extract complete text from Word document preserving structure.
+    """
+    try:
+        doc = docx.Document(docx_path)
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        return text
+    except Exception as e:
+        st.error(f"Error reading Word document: {str(e)}")
+        return ""
+
+def extract_text_from_file(file_path: str, file_type: str) -> str:
+    """
+    Extract text from various file formats.
+    """
+    if file_type == 'pdf':
+        return extract_text_from_pdf(file_path)
+    elif file_type in ['docx', 'doc']:
+        return extract_text_from_docx(file_path)
+    elif file_type in ['txt', 'md']:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            st.error(f"Error reading text file: {str(e)}")
+            return ""
+    else:
+        st.error(f"Unsupported file type: {file_type}")
+        return ""
+
 def save_text_as_file(text: str, filename: str) -> str:
     """Save text content to a file and return path"""
     temp_dir = tempfile.gettempdir()
@@ -132,9 +166,22 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
     # Initialize tools - use FileReadTool for structured text
     cv_read_tool = FileReadTool(file_path=cv_text_path)
     job_read_tool = FileReadTool(file_path=job_desc_path)
-    semantic_mdx = MDXSearchTool()
     
     # STEP 1: Information Extraction Agents
+    job_description_analyzer = Agent(
+        role="Job Description Analyzer",
+        goal=(
+            "Carefully read the job description to extract two things: 1) a structured list of job "
+            "responsibilities and 2) a structured list of required skills and qualifications."
+        ),
+        tools=[job_read_tool],
+        verbose=True,
+        backstory=(
+            "You are an expert in deconstructing job postings. Your keen eye for detail lets you "
+            "separate responsibilities from requirements so that other agents can act on your insights. "
+            "Always organize information clearly and concisely."
+        )
+    )
     job_description_analyzer = Agent(
         role="Job Description Analyzer",
         goal=(
@@ -274,7 +321,7 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
     job_extraction_task = Task(
         description=(
             f"Analyze the job description at {job_desc_path}. "
-            "Use semantic search to extract:\n"
+            "Extract and structure:\n"
             "1. Core responsibilities (list format)\n"
             "2. Required technical skills\n"
             "3. Required soft skills\n"
@@ -282,7 +329,7 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
             "5. Company culture indicators\n"
             "Provide structured output with clear categorization."
         ),
-        expected_output="Structured JSON-like output with categorized job requirements",
+        expected_output="Structured output with categorized job requirements",
         agent=job_description_analyzer,
         async_execution=False
     )
@@ -636,7 +683,7 @@ def main():
     This tool uses a multi-agent AI system with retrieval-augmented generation to:
     - Extract and analyze job requirements using embeddings
     - Assess candidate fit quantitatively and qualitatively
-    - Generate adaptive, honest application materials based on fit level
+    - Generate adaptive, honest application materials (CV and cover letter) based on fit level
     """)
     
     # API Setup
@@ -654,9 +701,9 @@ def main():
     with col1:
         st.subheader("Your Resume/CV")
         resume_file = st.file_uploader(
-            "Upload your CV (PDF format)",
-            type=['pdf'],
-            help="Upload your current resume in PDF format"
+            "Upload your CV",
+            type=['pdf', 'docx', 'doc', 'txt', 'md'],
+            help="Upload your CV in PDF, Word, or text format"
         )
     
     with col2:
@@ -694,16 +741,21 @@ def main():
         
         with st.spinner("🔄 Processing your application... This may take a few minutes."):
             try:
-                # Extract PDF text first (preserves structure)
+                # Extract text from CV (supports multiple formats)
                 status_text = st.empty()
-                status_text.text("Extracting text from PDF...")
+                status_text.text("Extracting text from your CV...")
                 
-                # Save PDF temporarily first
+                # Save file temporarily first
                 resume_path = save_uploaded_file(resume_file)
-                resume_text = extract_text_from_pdf(resume_path)
+                
+                # Determine file type
+                file_extension = resume_file.name.split('.')[-1].lower()
+                
+                # Extract text based on file type
+                resume_text = extract_text_from_file(resume_path, file_extension)
                 
                 if not resume_text:
-                    st.error("❌ Failed to extract text from PDF. Please try a different PDF.")
+                    st.error(f"❌ Failed to extract text from {file_extension.upper()}. Please try a different file or format.")
                     return
                 
                 # Save extracted text as a file
