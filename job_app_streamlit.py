@@ -767,19 +767,6 @@ def main():
                 status_text.text("Step 3/3: Generating application materials...")
                 progress_bar.progress(100)
                 
-                # Extract individual task outputs
-                task_outputs = {}
-                for task in crew.tasks:
-                    if hasattr(task, 'output') and task.output:
-                        task_outputs[task.agent.role] = str(task.output)
-                
-                # Get the fit assessment specifically
-                fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
-                cv_extraction_output = task_outputs.get('CV Parser and Analyzer', '')
-                
-                # Validate outputs for misattributions
-                validation_warnings = validate_outputs(revised_cv, cover_letter, cv_extraction_output)
-                
                 # Read generated files - try multiple possible locations
                 temp_dir = tempfile.gettempdir()
                 possible_locations = [
@@ -812,6 +799,19 @@ def main():
                     # For now, use the full result as a placeholder
                     revised_cv = "# Revised CV\n\n" + result_str
                     cover_letter = "# Cover Letter\n\n" + result_str
+                
+                # Extract individual task outputs
+                task_outputs = {}
+                for task in crew.tasks:
+                    if hasattr(task, 'output') and task.output:
+                        task_outputs[task.agent.role] = str(task.output)
+                
+                # Get the fit assessment specifically
+                fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
+                cv_extraction_output = task_outputs.get('CV Parser and Analyzer', '')
+                
+                # Validate outputs for misattributions (now that revised_cv and cover_letter are defined)
+                validation_warnings = validate_outputs(revised_cv, cover_letter, cv_extraction_output)
                 
                 # Store results with timestamp
                 from datetime import datetime
