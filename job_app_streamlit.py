@@ -178,16 +178,15 @@ def markdown_to_docx(md_text: str, filename: str) -> str:
 def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
     """
     Deterministic parser: group bullets under the employer header that precedes them.
+    Works best for CVs like:
 
-    Logic:
-    - In PROFESSIONAL EXPERIENCE:
-        employer line  -> first non-bullet line when we 'expect_employer'
-        title line     -> next non-bullet line (when we 'expect_title_or_dates')
-        dates line     -> any standalone date line (e.g. "June 2025 – Aug. 2025")
-        bullets        -> lines starting with "•"
-    - Placeholder bullets like "Responsibilities to be detailed." are dropped.
+    EXPERIENCE
+    Instiglio – Consulting firm in international development
+    Senior Associate, Nairobi, Kenya March 2024 – June 2024
+    • Bullet 1
+    • Bullet 2
+    ...
     """
-
     lines = [l.strip() for l in cv_text.split("\n") if l.strip()]
     structured = {
         "positions": [],
@@ -197,55 +196,28 @@ def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
 
     current_section = None
     current_pos = None
-    expect = None  # None / "employer" / "title_or_dates" / "bullets"
-
-    months = ["jan", "feb", "mar", "apr", "may", "jun", "jul",
-              "aug", "sep", "oct", "nov", "dec"]
-
-    def is_date_line(text: str) -> bool:
-        t = text.lower()
-        has_year = re.search(r"\d{4}", t) is not None
-        has_month = any(m in t for m in months)
-        return has_year and has_month
 
     for line in lines:
         upper = line.upper()
 
-        # ---------- Section detection ----------
-        if "PROFESSIONAL EXPERIENCE" in upper or upper.startswith("EXPERIENCE"):
+        # Section detection
+        if upper.startswith("EXPERIENCE"):
             current_section = "experience"
-            expect = "employer"
             continue
         if upper.startswith("EDUCATION"):
             current_section = "education"
-            expect = None
             continue
         if "SPECIFIC SKILLS" in upper or upper.startswith("SKILLS"):
             current_section = "skills"
-            expect = None
             continue
 
-        # ---------- EXPERIENCE ----------
         if current_section == "experience":
-            # Bullet line?
-            if line.startswith("•"):
-                if current_pos is None:
-                    continue
-                bullet = line.lstrip("•").strip()
-                if not bullet:
-                    continue
-                # drop placeholders like "Responsibilities to be detailed."
-                if "responsibilities to be detailed" in bullet.lower():
-                    continue
-                current_pos["responsibilities"].append(bullet)
-                expect = "bullets"
-                continue
-
-            # If we are expecting an employer (first line of a role)
-            if expect == "employer":
-                # Finalize previous position
+            # New employer line heuristic: has a dash and not a bullet
+            if not line.startswith("•") and ("–" in line or " - " in line):
+                # Finish previous position
                 if current_pos is not None:
                     structured["positions"].append(current_pos)
+                # Start new
                 current_pos = {
                     "employer": line,
                     "title": "",
@@ -253,53 +225,31 @@ def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
                     "location": "",
                     "responsibilities": []
                 }
-                expect = "title_or_dates"
                 continue
 
-            # If title/dates line
-            if expect == "title_or_dates" and current_pos is not None:
-                if is_date_line(line):
-                    current_pos["dates"] = line
-                else:
-                    current_pos["title"] = line
-                expect = "bullets"
+            # Title/dates line: first non-bullet after employer
+            if current_pos is not None and not line.startswith("•") and current_pos["title"] == "":
+                current_pos["title"] = line
+                m = re.search(r"(\d{4}.*)$", line)
+                if m:
+                    current_pos["dates"] = m.group(1).strip()
                 continue
 
-            # If in bullets and we see a pure date line, attach as dates if missing
-            if expect == "bullets" and current_pos is not None and is_date_line(line):
-                if not current_pos["dates"]:
-                    current_pos["dates"] = line
+            # Bullet line
+            if current_pos is not None and line.startswith("•"):
+                bullet = line.lstrip("•").strip()
+                if bullet:
+                    current_pos["responsibilities"].append(bullet)
                 continue
 
-            # Otherwise, in bullets and non-bullet line:
-            #   either start a new employer (new role) or treat as continuation.
-            if expect == "bullets" and current_pos is not None:
-                looks_like_new_employer = (
-                    not any(ch.isdigit() for ch in line) and
-                    len(line.split()) <= 10 and
-                    line[0].isupper()
-                )
-                if looks_like_new_employer:
-                    # new role -> close current and start new employer
-                    structured["positions"].append(current_pos)
-                    current_pos = {
-                        "employer": line,
-                        "title": "",
-                        "dates": "",
-                        "location": "",
-                        "responsibilities": []
-                    }
-                    expect = "title_or_dates"
-                elif current_pos["responsibilities"]:
-                    # continuation of last bullet
-                    current_pos["responsibilities"][-1] += " " + line
+            # Continuation line for last bullet
+            if current_pos is not None and current_pos["responsibilities"]:
+                current_pos["responsibilities"][-1] += " " + line
                 continue
 
-        # ---------- EDUCATION ----------
         elif current_section == "education":
             structured["education"].append(line)
 
-        # ---------- SKILLS ----------
         elif current_section == "skills":
             raw_pieces = re.split(r"[|,]", line)
             for p in raw_pieces:
@@ -311,7 +261,7 @@ def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
                 else:
                     structured["skills"]["soft"].append(s)
 
-    # add last position
+    # Add last position if exists
     if current_pos is not None:
         structured["positions"].append(current_pos)
 
@@ -478,12 +428,7 @@ def create_agents_and_tasks(cv_structured: Dict, job_description_text: str):
             "3) Professional Experience (use positions array)\n"
             "4) Education (summarized from JSON.education)\n"
             "5) Skills (from JSON.skills)\n"
-            "IMPORTANT:\n"
-            "- If dates or location are missing in the JSON for a position, simply OMIT those lines.\n"
-            "- Do NOT write placeholders like '[Insert Dates]' or '[Insert Location]'.\n"
-
         ),
-        
         expected_output="Complete Markdown CV with correct employer→achievement mapping preserved.",
         output_file=cv_output_path,
         agent=cv_strategist,
@@ -508,8 +453,7 @@ def create_agents_and_tasks(cv_structured: Dict, job_description_text: str):
             "- 1–2 body paragraphs highlighting specific achievements with correct employers\n"
             "- Connection to the job and organization\n"
             "- Closing with enthusiasm and invitation to talk\n"
-            "- The output must be plain text only. Do not use markwdown, backsticks or code formatting\n"
- ),
+        ),
         expected_output="A 250–400 word factually correct cover letter in Markdown.",
         output_file=cl_output_path,
         agent=cover_letter_writer,
