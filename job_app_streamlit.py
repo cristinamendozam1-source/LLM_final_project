@@ -191,21 +191,6 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
             "Always organize information clearly and concisely."
         )
     )
-    job_description_analyzer = Agent(
-        role="Job Description Analyzer",
-        goal=(
-            "Extract and structure key information from job descriptions: "
-            "1) List of responsibilities, 2) Required skills and qualifications, "
-            "3) Company culture indicators, 4) Experience level requirements."
-        ),
-        tools=[semantic_mdx],
-        verbose=True,
-        backstory=(
-            "You are an expert in parsing job postings with precision. You use "
-            "semantic search and embeddings to identify and categorize job requirements "
-            "accurately. You structure information for downstream analysis."
-        )
-    )
     
     cv_parser = Agent(
         role="CV Parser and Analyzer",
