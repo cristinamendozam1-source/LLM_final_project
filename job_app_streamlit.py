@@ -5,7 +5,7 @@ from pathlib import Path
 import json
 from typing import Dict, List, Tuple
 import PyPDF2
-import docx  # For Word documents
+from docx import Document  # python-docx library
 from crewai import Agent, Task, Crew
 from crewai_tools import FileReadTool
 import warnings
@@ -85,7 +85,7 @@ def extract_text_from_docx(docx_path: str) -> str:
     Extract complete text from Word document preserving structure.
     """
     try:
-        doc = docx.Document(docx_path)
+        doc = Document(docx_path)
         text = ""
         for paragraph in doc.paragraphs:
             text += paragraph.text + "\n"
@@ -144,13 +144,18 @@ def setup_openai_api():
                 st.warning("⚠️ Please enter your OpenAI API key to continue")
                 return False
 
-def save_uploaded_file(uploaded_file, suffix='.pdf'):
+def save_uploaded_file(uploaded_file) -> str:
     """Save uploaded file to temporary directory and return path"""
-    temp_dir = tempfile.gettempdir()
-    temp_path = os.path.join(temp_dir, f"temp_{uploaded_file.name}")
-    with open(temp_path, 'wb') as f:
-        f.write(uploaded_file.getbuffer())
-    return temp_path
+    try:
+        temp_dir = tempfile.gettempdir()
+        # Use original filename to preserve extension
+        temp_path = os.path.join(temp_dir, f"uploaded_{uploaded_file.name}")
+        with open(temp_path, 'wb') as f:
+            f.write(uploaded_file.getbuffer())
+        return temp_path
+    except Exception as e:
+        st.error(f"Error saving uploaded file: {str(e)}")
+        return ""
 
 def save_text_as_markdown(text: str, filename: str):
     """Save text content as markdown file"""
@@ -683,7 +688,7 @@ def main():
     This tool uses a multi-agent AI system with retrieval-augmented generation to:
     - Extract and analyze job requirements using embeddings
     - Assess candidate fit quantitatively and qualitatively
-    - Generate adaptive, honest application materials (CV and cover letter) based on fit level
+    - Generate adaptive, honest application materials based on fit level
     """)
     
     # API Setup
@@ -722,8 +727,8 @@ def main():
         else:
             job_file = st.file_uploader(
                 "Upload job description",
-                type=['txt', 'md', 'pdf'],
-                help="Upload job description in text, markdown, or PDF format"
+                type=['txt', 'md', 'pdf', 'docx', 'doc'],
+                help="Upload job description in various formats"
             )
     
     # Process button
@@ -754,18 +759,40 @@ def main():
                 # Extract text based on file type
                 resume_text = extract_text_from_file(resume_path, file_extension)
                 
-                if not resume_text:
-                    st.error(f"❌ Failed to extract text from {file_extension.upper()}. Please try a different file or format.")
+                if not resume_text or len(resume_text.strip()) < 50:
+                    st.error(f"❌ Failed to extract meaningful text from {file_extension.upper()}. The file may be empty or corrupted. Please try a different file.")
                     return
+                
+                # Display preview of extracted text for debugging
+                with st.expander("📄 Preview extracted CV text (first 500 characters)"):
+                    st.text(resume_text[:500] + "..." if len(resume_text) > 500 else resume_text)
                 
                 # Save extracted text as a file
                 cv_text_path = save_text_as_file(resume_text, "cv_text.txt")
                 
                 # Save job description
                 if job_input_method == "Paste Text":
+                    if not job_description or len(job_description.strip()) < 50:
+                        st.error("❌ Job description is too short. Please provide a complete job description.")
+                        return
                     job_desc_path = save_text_as_markdown(job_description, "job_description.md")
                 else:
-                    job_desc_path = save_uploaded_file(job_file, suffix='.md')
+                    job_desc_path = save_uploaded_file(job_file)
+                    # Convert job file to text if needed
+                    if job_file.name.endswith(('.pdf', '.docx', '.doc')):
+                        job_extension = job_file.name.split('.')[-1].lower()
+                        job_text = extract_text_from_file(job_desc_path, job_extension)
+                        if job_text:
+                            job_desc_path = save_text_as_file(job_text, "job_description.txt")
+                
+                # Display job description preview
+                with st.expander("📋 Preview job description (first 300 characters)"):
+                    try:
+                        with open(job_desc_path, 'r', encoding='utf-8') as f:
+                            job_preview = f.read()
+                            st.text(job_preview[:300] + "..." if len(job_preview) > 300 else job_preview)
+                    except:
+                        st.text("Could not load preview")
                 
                 # Create progress indicators
                 progress_bar = st.progress(0)
@@ -784,7 +811,14 @@ def main():
                     'cv_text': cv_text_path
                 }
                 
-                result = crew.kickoff(inputs=inputs)
+                # Execute the crew
+                try:
+                    result = crew.kickoff(inputs=inputs)
+                except Exception as crew_error:
+                    st.error(f"❌ Error during AI processing: {str(crew_error)}")
+                    with st.expander("🔍 Detailed Error Information"):
+                        st.code(str(crew_error))
+                    return
                 
                 status_text.text("Step 3/3: Generating application materials...")
                 progress_bar.progress(100)
@@ -850,10 +884,13 @@ def main():
                 
                 status_text.text("✅ Processing complete!")
                 progress_bar.empty()
+                status_text.empty()
                 
             except Exception as e:
                 st.error(f"❌ An error occurred: {str(e)}")
-                st.exception(e)
+                import traceback
+                with st.expander("🔍 Error Details (for debugging)"):
+                    st.code(traceback.format_exc())
                 return
     
     # Display results
