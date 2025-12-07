@@ -385,7 +385,7 @@ def main():
     This tool uses a multi-agent AI system with retrieval-augmented generation to:
     - Extract and analyze job requirements using embeddings
     - Assess candidate fit quantitatively and qualitatively
-    - Generate adaptive, honest application materials based on fit level
+    - Generate adaptive, honest application materials (CV and cover letter) based on fit level
     """)
     
     # API Setup
