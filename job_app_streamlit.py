@@ -7,7 +7,7 @@ from typing import Dict, List, Tuple
 import PyPDF2
 import docx  # For Word documents
 from crewai import Agent, Task, Crew
-from crewai_tools import MDXSearchTool, FileReadTool
+from crewai_tools import FileReadTool
 import warnings
 import re
 warnings.filterwarnings('ignore')
