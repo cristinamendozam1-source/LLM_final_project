@@ -127,17 +127,35 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     cv_parser = Agent(
         role="CV Parser and Analyzer",
         goal=(
-            "Parse the candidate's CV into structured components: "
-            "1) Professional experiences with quantifiable achievements, "
-            "2) Technical and soft skills, 3) Education and certifications, "
-            "4) Career trajectory and growth indicators."
+            "Extract complete, structured information from the candidate's CV:\n"
+            "EXTRACT WITH PRECISION:\n"
+            "1. For EACH position:\n"
+            "   - Exact employer/organization name\n"
+            "   - Exact position title\n"
+            "   - Exact dates\n"
+            "   - EVERY bullet point and achievement\n"
+            "   - Quantified results (numbers, percentages, impact)\n"
+            "2. Skills inventory:\n"
+            "   - Technical skills with proficiency levels\n"
+            "   - Soft skills demonstrated\n"
+            "   - Domain expertise\n"
+            "3. Education:\n"
+            "   - Degrees, institutions, dates\n"
+            "   - Certifications and training\n"
+            "4. Career insights:\n"
+            "   - Progression trajectory\n"
+            "   - Leadership roles\n"
+            "   - Cross-functional experience\n\n"
+            "CRITICAL: Maintain a complete, detailed inventory. Do not summarize or condense."
         ),
         tools=[semantic_pdf],
         verbose=True,
         backstory=(
-            "You specialize in extracting meaningful information from resumes using "
-            "embedding-based retrieval. You identify not just what's written, but the "
-            "underlying competencies and potential in a candidate's background."
+            "You are an expert at comprehensive CV analysis using embedding-based retrieval. "
+            "You understand that preserving every detail is crucial for downstream agents. "
+            "You create a complete, structured representation that captures not just what's "
+            "explicitly stated, but also the underlying competencies and achievements demonstrated. "
+            "You never lose information through over-summarization."
         )
     )
     
@@ -164,37 +182,65 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     cv_strategist = Agent(
         role="Adaptive CV Strategist",
         goal=(
-            "Create role-specific CV revisions based on fit level:\n"
-            "- HIGH FIT (75%+): Confident, achievement-focused revision emphasizing "
-            "direct alignment and quantifiable impact.\n"
-            "- MEDIUM/LOW FIT (<75%): Honest revision highlighting transferable skills, "
-            "relevant experiences, and growth potential without overstating qualifications."
+            "Optimize CV presentation while maintaining 100% factual accuracy:\n"
+            "CRITICAL RULES:\n"
+            "1. NEVER move experiences between different employers or organizations\n"
+            "2. NEVER combine or merge information from different positions\n"
+            "3. NEVER add achievements that aren't in the original CV\n"
+            "4. PRESERVE all original experiences, dates, and organizational details\n"
+            "5. Keep ALL bullet points and details from the original CV\n\n"
+            "WHAT TO DO:\n"
+            "- Reorder bullet points to lead with most relevant achievements\n"
+            "- Adjust phrasing to emphasize alignment (without changing facts)\n"
+            "- Add context that connects experiences to job requirements\n"
+            "- Strengthen action verbs while keeping original meaning\n"
+            "- Highlight transferable skills in descriptions\n\n"
+            "APPROACH BY FIT LEVEL:\n"
+            "- HIGH FIT (75%+): Lead with strongest direct alignments, confident tone\n"
+            "- MEDIUM/LOW FIT (<75%): Emphasize transferable skills, growth potential"
         ),
         tools=[semantic_pdf, semantic_mdx],
         verbose=True,
         backstory=(
-            "You are a strategic CV editor who adapts your approach based on candidate fit. "
-            "For strong fits, you confidently showcase alignment. For partial fits, you "
-            "remain truthful while emphasizing transferable value and learning agility."
+            "You are a meticulous CV editor who treats candidate information as sacred. "
+            "You understand that fabrication or mixing up experiences is unethical and harmful. "
+            "Your expertise is in strategic presentation - reframing and reordering existing "
+            "content to maximize impact while maintaining complete factual accuracy. You NEVER "
+            "move achievements between different employers or positions."
         )
     )
     
     cover_letter_writer = Agent(
         role="Adaptive Cover Letter Writer",
         goal=(
-            "Write compelling cover letters (250-400 words) tailored to fit level:\n"
-            "- HIGH FIT: Confident narrative demonstrating direct capability match.\n"
-            "- MEDIUM FIT: Balanced letter acknowledging gaps while emphasizing transferable "
-            "skills and genuine interest.\n"
-            "- LOW FIT: Professional letter transparently addressing fit limitations while "
-            "highlighting growth mindset and relevant competencies."
+            "Write compelling, factually accurate cover letters (250-400 words) tailored to fit level.\n\n"
+            "CRITICAL ACCURACY RULES:\n"
+            "1. ONLY reference experiences that are actually in the CV\n"
+            "2. NEVER attribute an achievement to the wrong employer/organization\n"
+            "3. VERIFY each claim against the CV parser's detailed extraction\n"
+            "4. If mentioning a specific achievement, confirm which employer it was with\n"
+            "5. Keep employer-achievement pairings exactly as they appear in original CV\n\n"
+            "CONTENT APPROACH BY FIT LEVEL:\n"
+            "- HIGH FIT (75%+): Confident narrative with direct capability matches\n"
+            "- MEDIUM FIT (50-74%): Balanced letter acknowledging gaps while emphasizing \n"
+            "  transferable skills and genuine interest\n"
+            "- LOW FIT (<50%): Professional letter transparently addressing fit limitations \n"
+            "  while highlighting growth mindset and relevant competencies\n\n"
+            "STRUCTURE:\n"
+            "1. Opening: Express interest and briefly state relevant background\n"
+            "2. Body (2-3 paragraphs): Connect specific experiences to job requirements\n"
+            "   - Reference actual positions and achievements from CV\n"
+            "   - Ensure employer names are correct for each achievement mentioned\n"
+            "3. Closing: Express enthusiasm and request for next steps"
         ),
         tools=[semantic_pdf, semantic_mdx],
         verbose=True,
         backstory=(
-            "You write persuasive yet honest cover letters. You adapt tone and content "
-            "based on fit assessment, always maintaining professionalism and authenticity. "
-            "You help candidates position themselves realistically while showing their best qualities."
+            "You write persuasive yet rigorously honest cover letters. You understand that "
+            "misattributing achievements is a critical error that could harm the candidate's "
+            "credibility. Before mentioning any achievement, you verify it against the CV parser's "
+            "extraction to ensure you're attributing it to the correct employer. You adapt tone "
+            "based on fit assessment while maintaining complete factual integrity."
         )
     )
     
@@ -238,16 +284,37 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     
     cv_extraction_task = Task(
         description=(
-            f"Parse the resume at {resume_path}. "
-            "Use embedding-based retrieval to extract:\n"
-            "1. Professional experiences with achievements\n"
-            "2. Technical skills inventory\n"
-            "3. Soft skills demonstrated\n"
-            "4. Education and certifications\n"
-            "5. Career progression indicators\n"
-            "Provide structured output for analysis."
+            f"Parse the resume at {resume_path} with complete detail preservation. "
+            "Use embedding-based retrieval to extract:\n\n"
+            "FOR EACH PROFESSIONAL EXPERIENCE:\n"
+            "Position: [Exact title]\n"
+            "Organization: [Exact name]\n"
+            "Dates: [Exact dates]\n"
+            "Responsibilities & Achievements:\n"
+            "- [List EVERY bullet point verbatim]\n"
+            "- [Include ALL quantified results]\n"
+            "- [Capture ALL mentioned projects]\n\n"
+            "SKILLS INVENTORY:\n"
+            "Technical Skills: [Comprehensive list]\n"
+            "Soft Skills: [All demonstrated skills]\n"
+            "Domain Expertise: [Areas of specialization]\n\n"
+            "EDUCATION & CERTIFICATIONS:\n"
+            "[Complete list with institutions and dates]\n\n"
+            "CAREER INSIGHTS:\n"
+            "- Years of experience in relevant areas\n"
+            "- Leadership scope and team sizes\n"
+            "- Geographic experience\n"
+            "- Industry exposure\n\n"
+            "OUTPUT: Comprehensive structured breakdown preserving ALL details from CV."
         ),
-        expected_output="Structured breakdown of candidate's qualifications and experiences",
+        expected_output=(
+            "Detailed structured breakdown with:\n"
+            "- Complete list of positions with ALL achievements preserved\n"
+            "- Full skills inventory\n"
+            "- Complete education/certification history\n"
+            "- Career progression analysis\n"
+            "NO INFORMATION LOSS - every detail matters for downstream agents"
+        ),
         agent=cv_parser,
         async_execution=False
     )
@@ -256,16 +323,32 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     fit_assessment_task = Task(
         description=(
             "Based on extracted job requirements and CV information:\n"
-            "1. Calculate a numerical fit score (0-100%) with justification\n"
-            "2. List 3-5 key strengths and alignments\n"
-            "3. Identify 2-4 gaps or weaknesses\n"
+            "1. Calculate a numerical fit score (0-100%) with detailed justification\n"
+            "2. List 3-5 key strengths and alignments with specific examples\n"
+            "3. Identify 2-4 gaps or weaknesses with specific missing qualifications\n"
             "4. Categorize fit level: HIGH (75%+), MEDIUM (50-74%), LOW (<50%)\n"
-            "5. Provide hiring likelihood assessment\n\n"
-            "Use retrieved context from both documents. Be honest and data-driven."
+            "5. Provide hiring likelihood assessment with reasoning\n\n"
+            "Use retrieved context from both documents. Be honest and data-driven.\n\n"
+            "FORMAT YOUR RESPONSE AS:\n"
+            "## Fit Score: [X]%\n"
+            "**Category:** [HIGH/MEDIUM/LOW] FIT\n\n"
+            "### Key Strengths:\n"
+            "- [List each strength with specific evidence from CV]\n\n"
+            "### Gaps and Areas for Growth:\n"
+            "- [List each gap with specific missing requirement]\n\n"
+            "### Overall Assessment:\n"
+            "[Provide 2-3 paragraph narrative explaining the score, addressing:\n"
+            "- Why this specific percentage?\n"
+            "- What are the strongest alignment points?\n"
+            "- What are the main concerns?\n"
+            "- What is the hiring likelihood and why?]\n\n"
+            "### Recommendation:\n"
+            "[Brief recommendation on application strategy]"
         ),
         expected_output=(
-            "Assessment report with: numerical score, fit category, strengths list, "
-            "gaps list, and narrative justification"
+            "Comprehensive assessment report with: numerical score with justification, "
+            "fit category, detailed strengths list with examples, detailed gaps list, "
+            "narrative assessment explaining the scoring, and hiring likelihood with reasoning"
         ),
         agent=recruitment_expert,
         context=[job_extraction_task, cv_extraction_task],
@@ -280,20 +363,50 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     # STEP 3 TASKS: Adaptive Content Generation
     cv_revision_task = Task(
         description=(
-            "Create a revised CV based on the fit assessment:\n\n"
-            "IF FIT SCORE >= 75% (HIGH FIT):\n"
-            "- Write confidently, emphasizing direct qualifications\n"
-            "- Lead with strongest alignments\n"
-            "- Use powerful action verbs\n"
-            "- Quantify achievements prominently\n\n"
-            "IF FIT SCORE < 75% (MEDIUM/LOW FIT):\n"
-            "- Remain honest about experience level\n"
-            "- Emphasize transferable skills\n"
-            "- Highlight learning agility and adaptability\n"
-            "- Show genuine interest in growth\n\n"
-            "Always maintain truthfulness. Never fabricate experiences."
+            "Create an optimized CV that maintains complete factual accuracy.\n\n"
+            "STEP 1 - EXTRACT ORIGINAL STRUCTURE:\n"
+            "Carefully read the original CV and note:\n"
+            "- Every employer/organization name with exact dates\n"
+            "- Every position title\n"
+            "- Every single bullet point and achievement under each position\n"
+            "- Education, skills, and other sections\n\n"
+            "STEP 2 - ANALYZE JOB ALIGNMENT:\n"
+            "Identify which experiences are most relevant to the job requirements.\n\n"
+            "STEP 3 - STRATEGIC REFRAMING (NOT REWRITING):\n"
+            "For each position in the ORIGINAL CV:\n"
+            "- Keep the EXACT employer name, position title, and dates\n"
+            "- Include ALL original bullet points (don't remove content)\n"
+            "- Reorder bullets to lead with most job-relevant items\n"
+            "- Adjust phrasing to highlight alignment WITHOUT changing facts\n"
+            "- Add brief context phrases that connect to job requirements\n\n"
+            "CRITICAL RULES:\n"
+            "❌ NEVER move an achievement from Company A to Company B\n"
+            "❌ NEVER combine experiences from different positions\n"
+            "❌ NEVER add achievements not in the original CV\n"
+            "❌ NEVER remove substantial content\n"
+            "✅ DO reorder bullets within each position\n"
+            "✅ DO adjust phrasing to emphasize relevance\n"
+            "✅ DO add brief connective phrases\n"
+            "✅ DO strengthen action verbs while keeping meaning\n\n"
+            "TONE BY FIT LEVEL:\n"
+            "- HIGH FIT (75%+): Confident, achievement-focused language\n"
+            "- MEDIUM/LOW FIT (<75%): Emphasize transferable skills and growth potential\n\n"
+            "OUTPUT FORMAT:\n"
+            "Use clear markdown with sections for:\n"
+            "- Professional Summary (brief, tailored to role)\n"
+            "- Professional Experience (maintain chronological order from original)\n"
+            "- Education\n"
+            "- Skills\n"
+            "- Any other sections from original CV"
         ),
-        expected_output="Revised CV in Markdown format, tone-appropriate for fit level",
+        expected_output=(
+            "Complete CV in Markdown format that:\n"
+            "1. Preserves ALL original employers, positions, dates, and achievements\n"
+            "2. Reorders content strategically without fabrication\n"
+            "3. Uses language that emphasizes job alignment\n"
+            "4. Maintains 100% factual accuracy\n"
+            "5. Includes all details from original CV"
+        ),
         output_file=cv_output,
         agent=cv_strategist,
         context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
@@ -302,25 +415,68 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     
     cover_letter_task = Task(
         description=(
-            "Write a 250-400 word cover letter based on fit assessment:\n\n"
+            "Write a 250-400 word cover letter with STRICT factual accuracy.\n\n"
+            "STEP 1 - REVIEW CV EXTRACTION:\n"
+            "Carefully review the CV Parser's complete extraction to understand:\n"
+            "- Which achievements belong to which employer\n"
+            "- Exact position titles and organizations\n"
+            "- Timeline of candidate's career\n\n"
+            "STEP 2 - SELECT RELEVANT EXPERIENCES:\n"
+            "Based on job requirements and fit assessment, identify 2-3 key experiences "
+            "to highlight in the letter. NOTE THE EXACT EMPLOYER for each.\n\n"
+            "STEP 3 - WRITE WITH VERIFICATION:\n"
+            "For each experience or achievement you mention:\n"
+            "- VERIFY it's from the CV extraction\n"
+            "- CONFIRM which employer/organization it's associated with\n"
+            "- STATE the employer name correctly when referencing the achievement\n\n"
+            "Example CORRECT format:\n"
+            "'In my role as [Position] at [Correct Employer], I [achievement]...'\n\n"
+            "Example INCORRECT (DO NOT DO THIS):\n"
+            "'At [Company A], I achieved [something that actually happened at Company B]'\n\n"
+            "TONE BY FIT LEVEL:\n\n"
             "IF FIT SCORE >= 75% (HIGH FIT):\n"
-            "- Open with confidence and specific role alignment\n"
-            "- Detail direct experience matches\n"
+            "- Open with confidence and specific alignment to role\n"
+            "- Detail 2-3 direct experience matches with correct employer attribution\n"
             "- Express enthusiasm backed by qualifications\n"
-            "- Close with strong call to action\n\n"
+            "- Close with strong call to action\n"
+            "- Language: Confident, achievement-oriented, direct\n\n"
             "IF FIT SCORE 50-74% (MEDIUM FIT):\n"
-            "- Acknowledge gaps professionally\n"
-            "- Emphasize transferable skills strongly\n"
+            "- Acknowledge partial fit professionally\n"
+            "- Emphasize 2-3 transferable skills/experiences with correct attribution\n"
             "- Show genuine interest and quick learning ability\n"
-            "- Express enthusiasm for growth opportunity\n\n"
+            "- Express enthusiasm for growth opportunity\n"
+            "- Language: Balanced, honest about gaps, emphasizes potential\n\n"
             "IF FIT SCORE < 50% (LOW FIT):\n"
             "- Be transparent about experience differences\n"
-            "- Focus on relevant competencies\n"
-            "- Demonstrate growth mindset\n"
-            "- Express authentic interest while realistic about fit\n\n"
-            "Maintain professionalism throughout. Reference company mission when possible."
+            "- Focus on 1-2 most relevant competencies with correct attribution\n"
+            "- Demonstrate growth mindset and adaptability\n"
+            "- Express authentic interest while realistic about fit\n"
+            "- Language: Honest, humble, emphasizes learning agility\n\n"
+            "STRUCTURE:\n"
+            "Paragraph 1: Opening with interest and brief relevant background summary\n"
+            "Paragraph 2-3: Connect specific experiences to job (with correct employers!)\n"
+            "Paragraph 4: Express alignment with mission/values and request next steps\n\n"
+            "FORMAT:\n"
+            "Use standard business letter format with placeholders:\n"
+            "[Your Name]\n"
+            "[Your Contact Info]\n"
+            "[Date]\n\n"
+            "[Hiring Manager's Name]\n"
+            "[Company Name]\n"
+            "[Company Address]\n\n"
+            "Dear [Hiring Manager's Name],\n\n"
+            "[Letter content]\n\n"
+            "Sincerely,\n"
+            "[Your Name]"
         ),
-        expected_output="Professional cover letter 250-400 words, tone-matched to fit level",
+        expected_output=(
+            "Professional cover letter 250-400 words that:\n"
+            "1. Uses correct employer names for every achievement mentioned\n"
+            "2. References only experiences that exist in the CV\n"
+            "3. Tone-matches the fit level appropriately\n"
+            "4. Maintains complete factual accuracy\n"
+            "5. Is compelling within honest bounds"
+        ),
         output_file=cl_output,
         agent=cover_letter_writer,
         context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
@@ -329,15 +485,57 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     
     qa_task = Task(
         description=(
-            "Review the revised CV and cover letter:\n"
-            "1. Verify no fabricated information\n"
-            "2. Check tone appropriateness for fit level\n"
-            "3. Ensure consistency with original documents\n"
-            "4. Validate grammar and professionalism\n"
-            "5. Confirm persuasiveness within honest bounds\n\n"
-            "Provide approval or specific revision requests."
+            "Conduct thorough quality assurance review:\n\n"
+            "STEP 1 - FACTUAL VERIFICATION:\n"
+            "Cross-reference the revised CV with the original CV line by line:\n"
+            "- Check EVERY employer name is exactly correct\n"
+            "- Verify EVERY achievement is under the correct employer\n"
+            "- Confirm NO experiences were moved between different positions/companies\n"
+            "- Validate ALL dates match the original\n\n"
+            "STEP 2 - COMPLETENESS CHECK:\n"
+            "- Verify ALL positions from original CV are included\n"
+            "- Confirm ALL major achievements are preserved\n"
+            "- Check that detail level is maintained\n\n"
+            "STEP 3 - QUALITY ASSESSMENT:\n"
+            "- Tone appropriateness for fit level\n"
+            "- Grammar and professionalism\n"
+            "- Formatting consistency\n"
+            "- Overall persuasiveness\n\n"
+            "STEP 4 - COVER LETTER ACCURACY CHECK:\n"
+            "For EACH achievement or experience mentioned in the cover letter:\n"
+            "- Cross-reference with CV extraction\n"
+            "- Verify the employer name is correct\n"
+            "- Confirm no achievements were misattributed\n"
+            "- Check that all claims are factually accurate\n\n"
+            "STEP 5 - COVER LETTER QUALITY:\n"
+            "- Appropriate tone for fit level\n"
+            "- Professional quality and grammar\n"
+            "- Persuasive within honest bounds\n"
+            "- Proper business letter format\n\n"
+            "OUTPUT FORMAT:\n"
+            "Approval Status: [Approved / Approved with Minor Revisions / Major Revisions Required]\n\n"
+            "1. Verification of Fabricated Information:\n"
+            "   [Confirm each employer's achievements are correct or list discrepancies]\n\n"
+            "2. Tone Appropriateness for Fit Level:\n"
+            "   [Assessment]\n\n"
+            "3. Consistency with Original Documents:\n"
+            "   [Verification results]\n\n"
+            "4. Cover Letter Accuracy:\n"
+            "   [Verify each achievement is attributed to correct employer]\n\n"
+            "5. Grammar and Professionalism:\n"
+            "   [Notes and suggestions]\n\n"
+            "6. Persuasiveness within Honest Bounds:\n"
+            "   [Assessment]\n\n"
+            "Revision Notes:\n"
+            "[If needed, specific actionable revisions]"
         ),
-        expected_output="QA report with approval status and any revision notes",
+        expected_output=(
+            "Detailed QA report with approval status and verification that:\n"
+            "- No information was fabricated or misattributed\n"
+            "- All content is factually accurate\n"
+            "- Tone is appropriate\n"
+            "- Quality standards are met"
+        ),
         agent=quality_assurance_agent,
         context=[cv_revision_task, cover_letter_task, fit_assessment_task],
         async_execution=False
@@ -390,7 +588,7 @@ def main():
     This tool uses a multi-agent AI system with retrieval-augmented generation to:
     - Extract and analyze job requirements using embeddings
     - Assess candidate fit quantitatively and qualitatively
-    - Generate adaptive, honest application materials based on fit level
+    - Generate adaptive, honest application materials (CV and cover letter) based on fit level
     """)
     
     # API Setup
@@ -480,6 +678,15 @@ def main():
                 status_text.text("Step 3/3: Generating application materials...")
                 progress_bar.progress(100)
                 
+                # Extract individual task outputs
+                task_outputs = {}
+                for task in crew.tasks:
+                    if hasattr(task, 'output') and task.output:
+                        task_outputs[task.agent.role] = str(task.output)
+                
+                # Get the fit assessment specifically
+                fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
+                
                 # Read generated files - try multiple possible locations
                 temp_dir = tempfile.gettempdir()
                 possible_locations = [
@@ -513,12 +720,16 @@ def main():
                     revised_cv = "# Revised CV\n\n" + result_str
                     cover_letter = "# Cover Letter\n\n" + result_str
                 
-                # Store results
+                # Store results with timestamp
+                from datetime import datetime
                 st.session_state.results = {
-                    'assessment': str(result),
+                    'assessment': fit_assessment_output,
                     'revised_cv': revised_cv,
-                    'cover_letter': cover_letter
+                    'cover_letter': cover_letter,
+                    'qa_report': str(result),  # Store QA separately
+                    'all_outputs': task_outputs
                 }
+                st.session_state.generation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 st.session_state.processing_complete = True
                 
                 status_text.text("✅ Processing complete!")
@@ -548,19 +759,36 @@ def main():
         ''', unsafe_allow_html=True)
         
         # Tabs for different outputs
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📋 Fit Assessment",
             "📄 Revised CV",
             "✉️ Cover Letter",
+            "✅ QA Report",
             "💾 Download All"
         ])
         
         with tab1:
-            st.markdown("### Detailed Assessment")
+            st.markdown("### Detailed Fit Assessment")
             st.markdown(assessment)
+            
+            # Show breakdown if available
+            if 'all_outputs' in st.session_state.results:
+                with st.expander("📊 View Detailed Analysis"):
+                    job_analysis = st.session_state.results['all_outputs'].get('Job Description Analyzer', 'N/A')
+                    cv_analysis = st.session_state.results['all_outputs'].get('CV Parser and Analyzer', 'N/A')
+                    
+                    st.markdown("#### Job Requirements Extracted:")
+                    st.markdown(job_analysis)
+                    
+                    st.markdown("---")
+                    
+                    st.markdown("#### Candidate Profile Summary:")
+                    st.info("💡 **Use this to verify accuracy:** Check that all achievements in your revised CV and cover letter match the organizations listed here.")
+                    st.markdown(cv_analysis)
         
         with tab2:
             st.markdown("### Your Tailored CV")
+            st.info("⚠️ **Important:** Always review the CV carefully to ensure all information is accurate and no experiences were misattributed between employers.")
             st.markdown(st.session_state.results['revised_cv'])
             st.download_button(
                 label="⬇️ Download CV",
@@ -571,6 +799,7 @@ def main():
         
         with tab3:
             st.markdown("### Your Cover Letter")
+            st.info("⚠️ **Important:** Verify that all achievements mentioned are attributed to the correct employer. Personalize placeholders like [Your Name] and [Hiring Manager's Name].")
             st.markdown(st.session_state.results['cover_letter'])
             st.download_button(
                 label="⬇️ Download Cover Letter",
@@ -580,13 +809,22 @@ def main():
             )
         
         with tab4:
+            st.markdown("### Quality Assurance Report")
+            st.markdown(st.session_state.results.get('qa_report', 'No QA report available'))
+        
+        with tab5:
             st.markdown("### Download All Documents")
             
-            # Create combined document
-            combined = f"""# Job Application Package
-            
+            # Create combined document with proper assessment
+            combined = f"""# Job Application Package - Generated by AI Assistant
+
 ## Fit Assessment
 {assessment}
+
+---
+
+## Quality Assurance Report
+{st.session_state.results.get('qa_report', 'No QA report available')}
 
 ---
 
@@ -597,6 +835,10 @@ def main():
 
 ## Cover Letter
 {st.session_state.results['cover_letter']}
+
+---
+
+*Generated on {st.session_state.get('generation_date', 'N/A')}*
 """
             
             st.download_button(
