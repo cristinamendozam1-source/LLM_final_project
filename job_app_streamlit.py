@@ -182,65 +182,68 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     cv_strategist = Agent(
         role="Adaptive CV Strategist",
         goal=(
-            "Optimize CV presentation while maintaining 100% factual accuracy:\n"
-            "CRITICAL RULES:\n"
-            "1. NEVER move experiences between different employers or organizations\n"
-            "2. NEVER combine or merge information from different positions\n"
-            "3. NEVER add achievements that aren't in the original CV\n"
-            "4. PRESERVE all original experiences, dates, and organizational details\n"
-            "5. Keep ALL bullet points and details from the original CV\n\n"
-            "WHAT TO DO:\n"
-            "- Reorder bullet points to lead with most relevant achievements\n"
-            "- Adjust phrasing to emphasize alignment (without changing facts)\n"
-            "- Add context that connects experiences to job requirements\n"
-            "- Strengthen action verbs while keeping original meaning\n"
-            "- Highlight transferable skills in descriptions\n\n"
-            "APPROACH BY FIT LEVEL:\n"
-            "- HIGH FIT (75%+): Lead with strongest direct alignments, confident tone\n"
-            "- MEDIUM/LOW FIT (<75%): Emphasize transferable skills, growth potential"
+            "Optimize CV presentation while maintaining 100% factual accuracy:\n\n"
+            "⚠️ CRITICAL RULES - VIOLATIONS ARE UNACCEPTABLE:\n"
+            "1. NEVER EVER move an achievement from one employer to another\n"
+            "2. NEVER EVER combine information from different positions\n"
+            "3. NEVER EVER add achievements that aren't in the original CV\n"
+            "4. Each bullet point MUST stay under the EXACT employer where it originally appeared\n"
+            "5. If unsure which employer an achievement belongs to, DO NOT include it\n\n"
+            "YOUR ONLY ALLOWED CHANGES:\n"
+            "- Reorder bullet points WITHIN each position (not across positions)\n"
+            "- Adjust verb choice and phrasing WITHOUT changing facts\n"
+            "- Add brief contextual phrases that don't change the core statement\n"
+            "- Strengthen professional summary to emphasize relevant skills\n\n"
+            "WORKFLOW:\n"
+            "1. Read the COMPLETE CV extraction - note which bullets are under which employer\n"
+            "2. For EACH employer in the CV:\n"
+            "   - Copy the employer name, position title, and dates EXACTLY\n"
+            "   - Include ALL bullet points that were under that employer\n"
+            "   - Reorder those bullets by relevance to job\n"
+            "   - Adjust phrasing if needed WITHOUT changing facts\n"
+            "3. Do NOT move any content between employers\n\n"
+            "If an achievement mentions 'Living Goods' or '$4 million', CHECK which employer "
+            "it was actually done at in the CV extraction before including it."
         ),
         tools=[semantic_pdf, semantic_mdx],
         verbose=True,
         backstory=(
-            "You are a meticulous CV editor who treats candidate information as sacred. "
-            "You understand that fabrication or mixing up experiences is unethical and harmful. "
-            "Your expertise is in strategic presentation - reframing and reordering existing "
-            "content to maximize impact while maintaining complete factual accuracy. You NEVER "
-            "move achievements between different employers or positions."
+            "You are a meticulous CV editor with ZERO tolerance for factual errors. You treat "
+            "misattributing an achievement to the wrong employer as a career-ending mistake. "
+            "Before making ANY change, you verify it against the CV extraction. Your reputation "
+            "depends on perfect accuracy. You would rather omit content than risk misattribution."
         )
     )
     
     cover_letter_writer = Agent(
         role="Adaptive Cover Letter Writer",
         goal=(
-            "Write compelling, factually accurate cover letters (250-400 words) tailored to fit level.\n\n"
-            "CRITICAL ACCURACY RULES:\n"
-            "1. ONLY reference experiences that are actually in the CV\n"
-            "2. NEVER attribute an achievement to the wrong employer/organization\n"
-            "3. VERIFY each claim against the CV parser's detailed extraction\n"
-            "4. If mentioning a specific achievement, confirm which employer it was with\n"
-            "5. Keep employer-achievement pairings exactly as they appear in original CV\n\n"
-            "CONTENT APPROACH BY FIT LEVEL:\n"
-            "- HIGH FIT (75%+): Confident narrative with direct capability matches\n"
-            "- MEDIUM FIT (50-74%): Balanced letter acknowledging gaps while emphasizing \n"
-            "  transferable skills and genuine interest\n"
-            "- LOW FIT (<50%): Professional letter transparently addressing fit limitations \n"
-            "  while highlighting growth mindset and relevant competencies\n\n"
-            "STRUCTURE:\n"
-            "1. Opening: Express interest and briefly state relevant background\n"
-            "2. Body (2-3 paragraphs): Connect specific experiences to job requirements\n"
-            "   - Reference actual positions and achievements from CV\n"
-            "   - Ensure employer names are correct for each achievement mentioned\n"
-            "3. Closing: Express enthusiasm and request for next steps"
+            "Write compelling, factually accurate cover letters (250-400 words).\n\n"
+            "⚠️ CRITICAL ACCURACY RULES - VIOLATIONS ARE UNACCEPTABLE:\n"
+            "1. BEFORE mentioning ANY achievement, verify which employer it's from\n"
+            "2. NEVER say 'At Company X, I did [thing that was actually done at Company Y]'\n"
+            "3. For any quantified achievement or major project, state the CORRECT employer\n"
+            "4. When in doubt about attribution, don't mention the specific achievement\n\n"
+            "VERIFICATION PROCESS:\n"
+            "Before writing, review the CV extraction and make a reference list:\n"
+            "- Achievement A (with quantified results) was done at Employer X\n"
+            "- Achievement B (major project) was done at Employer Y\n"
+            "Then reference this list as you write.\n\n"
+            "WRITING APPROACH:\n"
+            "- Open with relevant background (don't need to mention specific achievements)\n"
+            "- Choose 1-2 achievements to highlight - CHECK EMPLOYER FIRST\n"
+            "- State: 'In my role as [Position] at [CORRECT Employer], I [achievement]'\n"
+            "- Connect skills to job requirements\n"
+            "- Express enthusiasm and close professionally"
         ),
         tools=[semantic_pdf, semantic_mdx],
         verbose=True,
         backstory=(
-            "You write persuasive yet rigorously honest cover letters. You understand that "
-            "misattributing achievements is a critical error that could harm the candidate's "
-            "credibility. Before mentioning any achievement, you verify it against the CV parser's "
-            "extraction to ensure you're attributing it to the correct employer. You adapt tone "
-            "based on fit assessment while maintaining complete factual integrity."
+            "You write persuasive cover letters with ZERO tolerance for errors. You know that "
+            "misattributing even one achievement destroys credibility. Before mentioning any "
+            "specific accomplishment, you verify its employer in the CV extraction. You would "
+            "rather write a more general letter than risk stating 'I did X at Company A' when "
+            "X was actually done at Company B. Accuracy is non-negotiable."
         )
     )
     
@@ -363,49 +366,66 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     # STEP 3 TASKS: Adaptive Content Generation
     cv_revision_task = Task(
         description=(
-            "Create an optimized CV that maintains complete factual accuracy.\n\n"
-            "STEP 1 - EXTRACT ORIGINAL STRUCTURE:\n"
-            "Carefully read the original CV and note:\n"
-            "- Every employer/organization name with exact dates\n"
-            "- Every position title\n"
-            "- Every single bullet point and achievement under each position\n"
-            "- Education, skills, and other sections\n\n"
-            "STEP 2 - ANALYZE JOB ALIGNMENT:\n"
-            "Identify which experiences are most relevant to the job requirements.\n\n"
-            "STEP 3 - STRATEGIC REFRAMING (NOT REWRITING):\n"
-            "For each position in the ORIGINAL CV:\n"
-            "- Keep the EXACT employer name, position title, and dates\n"
-            "- Include ALL original bullet points (don't remove content)\n"
-            "- Reorder bullets to lead with most job-relevant items\n"
-            "- Adjust phrasing to highlight alignment WITHOUT changing facts\n"
-            "- Add brief context phrases that connect to job requirements\n\n"
-            "CRITICAL RULES:\n"
-            "❌ NEVER move an achievement from Company A to Company B\n"
-            "❌ NEVER combine experiences from different positions\n"
-            "❌ NEVER add achievements not in the original CV\n"
-            "❌ NEVER remove substantial content\n"
-            "✅ DO reorder bullets within each position\n"
-            "✅ DO adjust phrasing to emphasize relevance\n"
-            "✅ DO add brief connective phrases\n"
-            "✅ DO strengthen action verbs while keeping meaning\n\n"
-            "TONE BY FIT LEVEL:\n"
-            "- HIGH FIT (75%+): Confident, achievement-focused language\n"
-            "- MEDIUM/LOW FIT (<75%): Emphasize transferable skills and growth potential\n\n"
-            "OUTPUT FORMAT:\n"
-            "Use clear markdown with sections for:\n"
-            "- Professional Summary (brief, tailored to role)\n"
-            "- Professional Experience (maintain chronological order from original)\n"
-            "- Education\n"
-            "- Skills\n"
-            "- Any other sections from original CV"
+            "Create an optimized CV maintaining 100% factual accuracy.\n\n"
+            "⚠️ BEFORE YOU START - READ THIS CAREFULLY:\n"
+            "The CV extraction shows which achievements belong to which employer.\n"
+            "Your job is to present this information strategically WITHOUT moving content.\n"
+            "Moving an achievement from Employer A to Employer B is FORBIDDEN.\n\n"
+            "MANDATORY PROCESS:\n\n"
+            "STEP 1 - EXTRACT THE STRUCTURE:\n"
+            "From the CV Parser's output, create a list:\n"
+            "- Employer 1: [Name], [Position], [Dates]\n"
+            "  • Bullet 1\n"
+            "  • Bullet 2\n"
+            "  • Bullet 3\n"
+            "- Employer 2: [Name], [Position], [Dates]\n"
+            "  • Bullet 1\n"
+            "  • Bullet 2\n\n"
+            "STEP 2 - VERIFY BOUNDARIES:\n"
+            "Review the CV extraction carefully and identify key achievements.\n"
+            "For each significant achievement (quantified results, major projects, etc.):\n"
+            "- Note which employer/organization it belongs to\n"
+            "- Create a mental map: Achievement X belongs to Employer Y\n\n"
+            "CRITICAL RULE:\n"
+            "Each achievement must stay under its original employer.\n"
+            "If you're unsure which employer an achievement belongs to, refer back to "
+            "the CV extraction to verify.\n\n"
+            "STEP 3 - OPTIMIZE WITHIN BOUNDARIES:\n"
+            "For EACH employer separately:\n"
+            "- Keep employer name, title, dates exactly as given\n"
+            "- List ALL bullets that belong to that employer\n"
+            "- Reorder bullets (most job-relevant first)\n"
+            "- Adjust phrasing to emphasize skills (without changing facts)\n\n"
+            "STEP 4 - WRITE THE CV:\n"
+            "Format:\n"
+            "# [Name]\n"
+            "[Contact info]\n\n"
+            "## Professional Summary\n"
+            "[2-3 sentences highlighting relevant experience]\n\n"
+            "## Professional Experience\n\n"
+            "### [Position Title]\n"
+            "[Exact Employer Name] – [Location] | [Exact Dates]\n"
+            "- [Bullet 1 - most relevant]\n"
+            "- [Bullet 2]\n"
+            "- [All other bullets from THIS employer only]\n\n"
+            "[Repeat for each employer]\n\n"
+            "## Education\n"
+            "[From original CV]\n\n"
+            "## Skills\n"
+            "[From original CV]\n\n"
+            "VERIFICATION BEFORE SUBMITTING:\n"
+            "- Did I keep each bullet under its original employer? YES/NO\n"
+            "- Did I move any achievements between employers? YES/NO (must be NO)\n"
+            "- Did I include all original content? YES/NO (must be YES)\n\n"
+            "If you moved ANY content between employers, START OVER."
         ),
         expected_output=(
-            "Complete CV in Markdown format that:\n"
-            "1. Preserves ALL original employers, positions, dates, and achievements\n"
-            "2. Reorders content strategically without fabrication\n"
-            "3. Uses language that emphasizes job alignment\n"
-            "4. Maintains 100% factual accuracy\n"
-            "5. Includes all details from original CV"
+            "Complete CV in Markdown with:\n"
+            "- All bullets under CORRECT original employer\n"
+            "- Strategic ordering within each position\n"
+            "- Enhanced phrasing without factual changes\n"
+            "- All original content preserved\n"
+            "ZERO employer-achievement misattributions"
         ),
         output_file=cv_output,
         agent=cv_strategist,
@@ -416,66 +436,59 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     cover_letter_task = Task(
         description=(
             "Write a 250-400 word cover letter with STRICT factual accuracy.\n\n"
-            "STEP 1 - REVIEW CV EXTRACTION:\n"
-            "Carefully review the CV Parser's complete extraction to understand:\n"
-            "- Which achievements belong to which employer\n"
-            "- Exact position titles and organizations\n"
-            "- Timeline of candidate's career\n\n"
-            "STEP 2 - SELECT RELEVANT EXPERIENCES:\n"
-            "Based on job requirements and fit assessment, identify 2-3 key experiences "
-            "to highlight in the letter. NOTE THE EXACT EMPLOYER for each.\n\n"
-            "STEP 3 - WRITE WITH VERIFICATION:\n"
-            "For each experience or achievement you mention:\n"
-            "- VERIFY it's from the CV extraction\n"
-            "- CONFIRM which employer/organization it's associated with\n"
-            "- STATE the employer name correctly when referencing the achievement\n\n"
-            "Example CORRECT format:\n"
-            "'In my role as [Position] at [Correct Employer], I [achievement]...'\n\n"
-            "Example INCORRECT (DO NOT DO THIS):\n"
-            "'At [Company A], I achieved [something that actually happened at Company B]'\n\n"
-            "TONE BY FIT LEVEL:\n\n"
-            "IF FIT SCORE >= 75% (HIGH FIT):\n"
-            "- Open with confidence and specific alignment to role\n"
-            "- Detail 2-3 direct experience matches with correct employer attribution\n"
-            "- Express enthusiasm backed by qualifications\n"
-            "- Close with strong call to action\n"
-            "- Language: Confident, achievement-oriented, direct\n\n"
-            "IF FIT SCORE 50-74% (MEDIUM FIT):\n"
-            "- Acknowledge partial fit professionally\n"
-            "- Emphasize 2-3 transferable skills/experiences with correct attribution\n"
-            "- Show genuine interest and quick learning ability\n"
-            "- Express enthusiasm for growth opportunity\n"
-            "- Language: Balanced, honest about gaps, emphasizes potential\n\n"
-            "IF FIT SCORE < 50% (LOW FIT):\n"
-            "- Be transparent about experience differences\n"
-            "- Focus on 1-2 most relevant competencies with correct attribution\n"
-            "- Demonstrate growth mindset and adaptability\n"
-            "- Express authentic interest while realistic about fit\n"
-            "- Language: Honest, humble, emphasizes learning agility\n\n"
-            "STRUCTURE:\n"
-            "Paragraph 1: Opening with interest and brief relevant background summary\n"
-            "Paragraph 2-3: Connect specific experiences to job (with correct employers!)\n"
-            "Paragraph 4: Express alignment with mission/values and request next steps\n\n"
-            "FORMAT:\n"
-            "Use standard business letter format with placeholders:\n"
-            "[Your Name]\n"
-            "[Your Contact Info]\n"
-            "[Date]\n\n"
-            "[Hiring Manager's Name]\n"
-            "[Company Name]\n"
-            "[Company Address]\n\n"
-            "Dear [Hiring Manager's Name],\n\n"
-            "[Letter content]\n\n"
-            "Sincerely,\n"
-            "[Your Name]"
+            "⚠️ CRITICAL: VERIFY BEFORE WRITING\n\n"
+            "STEP 1 - CREATE REFERENCE LIST:\n"
+            "Review CV Parser output and list key achievements with their ACTUAL employers:\n"
+            "Example format:\n"
+            "- '[Quantified achievement]' → Done at: [Employer name from CV extraction]\n"
+            "- '[Major project]' → Done at: [Employer name from CV extraction]\n"
+            "- '[Leadership role]' → Done at: [Employer name from CV extraction]\n\n"
+            "STEP 2 - SELECT WHAT TO HIGHLIGHT:\n"
+            "Choose 1-2 achievements that are most relevant to the job.\n"
+            "Write down which employer each one is from using your reference list.\n\n"
+            "STEP 3 - WRITE WITH CORRECT ATTRIBUTION:\n"
+            "Use this pattern ONLY:\n"
+            "'In my role as [Position] at [VERIFIED CORRECT Employer from CV], I [achievement].'\n\n"
+            "WRONG pattern (NEVER DO THIS):\n"
+            "❌ 'At [Current/Most Recent Company], I [achievement that was done at previous company]'\n"
+            "❌ 'In my current role, I [achievement from a different position]'\n\n"
+            "CORRECT pattern:\n"
+            "✅ 'In my role as [Position Title] at [Actual Employer Name], I [achievement]...'\n"
+            "✅ 'As [Position] at [Correct Organization], I led [specific project]...'\n\n"
+            "LETTER STRUCTURE:\n\n"
+            "Paragraph 1 (Opening):\n"
+            "- Express interest in the role\n"
+            "- Brief background (no specific achievements here)\n"
+            "- Mention total years of experience and general areas\n\n"
+            "Paragraph 2 (Main content):\n"
+            "- Pick 1-2 most relevant experiences from your reference list\n"
+            "- State: 'In my role as [Position] at [CORRECT Employer], I [achievement]'\n"
+            "- Explain how this relates to job requirements\n\n"
+            "Paragraph 3 (Connection):\n"
+            "- Connect skills/values to company mission\n"
+            "- Show understanding of role requirements\n"
+            "- Can mention additional relevant skills WITHOUT specific attributions\n\n"
+            "Paragraph 4 (Close):\n"
+            "- Express enthusiasm\n"
+            "- Request interview/next steps\n\n"
+            "TONE BY FIT LEVEL:\n"
+            "- HIGH (75%+): Confident, achievement-focused\n"
+            "- MEDIUM (50-74%): Balanced, honest about gaps, emphasize transferable skills\n"
+            "- LOW (<50%): Humble, focus on learning potential\n\n"
+            "FINAL VERIFICATION:\n"
+            "Before submitting, ask yourself:\n"
+            "- Did I mention any specific achievements with quantified results?\n"
+            "- If yes, did I verify the correct employer for EACH one against CV extraction?\n"
+            "- Am I 100% certain each achievement is attributed to its actual employer?\n"
+            "If not certain, rewrite to be more general or omit the detail."
         ),
         expected_output=(
-            "Professional cover letter 250-400 words that:\n"
-            "1. Uses correct employer names for every achievement mentioned\n"
-            "2. References only experiences that exist in the CV\n"
-            "3. Tone-matches the fit level appropriately\n"
-            "4. Maintains complete factual accuracy\n"
-            "5. Is compelling within honest bounds"
+            "250-400 word cover letter with:\n"
+            "- ZERO employer-achievement misattributions\n"
+            "- Correct employer names for any achievements mentioned\n"
+            "- Professional business letter format\n"
+            "- Appropriate tone for fit level\n"
+            "- Persuasive within bounds of complete accuracy"
         ),
         output_file=cl_output,
         agent=cover_letter_writer,
@@ -563,6 +576,82 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     )
     
     return crew
+
+def validate_outputs(revised_cv: str, cover_letter: str, cv_extraction: str) -> dict:
+    """
+    Validate CV and cover letter for potential misattribution errors.
+    Uses general heuristics applicable to any CV.
+    Returns dict with warnings if issues found.
+    """
+    warnings = {
+        'cv_warnings': [],
+        'cover_letter_warnings': []
+    }
+    
+    if not cv_extraction:
+        return warnings
+    
+    # Generic approach: Look for quantified achievements (numbers, $, %) 
+    # and check if they might be under unexpected employers
+    
+    import re
+    
+    # Extract all employer/organization names from CV extraction
+    employer_pattern = r'(?:Organization|Employer|Company):\s*([^\n]+)'
+    employers = re.findall(employer_pattern, cv_extraction, re.IGNORECASE)
+    
+    # Look for quantified achievements in revised CV
+    # Pattern: dollar amounts, percentages, large numbers with M/K/B
+    achievement_patterns = [
+        r'\$[\d,]+\s*(?:million|M|billion|B|thousand|K)',
+        r'\d+(?:,\d{3})*\s*(?:million|M|billion|B|thousand|K)',
+        r'\d+%',
+        r'\d+\+?\s*(?:people|users|customers|clients|employees|team members)'
+    ]
+    
+    # Check if major quantified achievements appear in unexpected places
+    cv_sections = revised_cv.split('###')
+    for section in cv_sections:
+        lines = section.split('\n')
+        section_header = lines[0] if lines else ''
+        
+        # Look for achievements in this section
+        for pattern in achievement_patterns:
+            matches = re.findall(pattern, section, re.IGNORECASE)
+            if matches and len(matches) >= 2:
+                # Multiple significant achievements in one section
+                # This might indicate consolidation from multiple roles
+                if len(section.split('-')) > 8:  # More than 8 bullet points
+                    warnings['cv_warnings'].append(
+                        f"⚠️ Section contains many achievements. Please verify all items "
+                        f"belong to the employer listed in this section."
+                    )
+                    break
+    
+    # Check cover letter for specific achievement claims
+    # Look for patterns like "At [Company], I [quantified achievement]"
+    cl_lines = cover_letter.split('.')
+    for line in cl_lines:
+        # Check if line contains both a company reference and quantified achievement
+        has_company_ref = any(word in line.lower() for word in ['at ', 'with ', 'for '])
+        has_quantified = any(re.search(pattern, line, re.IGNORECASE) for pattern in achievement_patterns)
+        
+        if has_company_ref and has_quantified:
+            warnings['cover_letter_warnings'].append(
+                f"⚠️ Achievement with specific numbers mentioned. Please verify it's "
+                f"attributed to the correct employer from your original CV."
+            )
+            break
+    
+    # General reminder if any quantified claims exist
+    if re.search(r'\$[\d,]+|[\d,]+\s*(?:million|M)', cover_letter):
+        if not warnings['cover_letter_warnings']:
+            warnings['cover_letter_warnings'].append(
+                "💡 Tip: Double-check that any specific achievements or numbers mentioned "
+                "are attributed to the correct employer."
+            )
+    
+    return warnings
 
 def extract_fit_score(assessment_text: str) -> Tuple[int, str]:
     """Extract fit score and category from assessment text"""
@@ -686,6 +775,10 @@ def main():
                 
                 # Get the fit assessment specifically
                 fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
+                cv_extraction_output = task_outputs.get('CV Parser and Analyzer', '')
+                
+                # Validate outputs for misattributions
+                validation_warnings = validate_outputs(revised_cv, cover_letter, cv_extraction_output)
                 
                 # Read generated files - try multiple possible locations
                 temp_dir = tempfile.gettempdir()
@@ -727,7 +820,8 @@ def main():
                     'revised_cv': revised_cv,
                     'cover_letter': cover_letter,
                     'qa_report': str(result),  # Store QA separately
-                    'all_outputs': task_outputs
+                    'all_outputs': task_outputs,
+                    'validation_warnings': validation_warnings
                 }
                 st.session_state.generation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 st.session_state.processing_complete = True
@@ -788,6 +882,12 @@ def main():
         
         with tab2:
             st.markdown("### Your Tailored CV")
+            
+            # Show validation warnings if any
+            if st.session_state.results.get('validation_warnings', {}).get('cv_warnings'):
+                for warning in st.session_state.results['validation_warnings']['cv_warnings']:
+                    st.warning(warning)
+            
             st.info("⚠️ **Important:** Always review the CV carefully to ensure all information is accurate and no experiences were misattributed between employers.")
             st.markdown(st.session_state.results['revised_cv'])
             st.download_button(
@@ -799,6 +899,12 @@ def main():
         
         with tab3:
             st.markdown("### Your Cover Letter")
+            
+            # Show validation warnings if any
+            if st.session_state.results.get('validation_warnings', {}).get('cover_letter_warnings'):
+                for warning in st.session_state.results['validation_warnings']['cover_letter_warnings']:
+                    st.warning(warning)
+            
             st.info("⚠️ **Important:** Verify that all achievements mentioned are attributed to the correct employer. Personalize placeholders like [Your Name] and [Hiring Manager's Name].")
             st.markdown(st.session_state.results['cover_letter'])
             st.download_button(
