@@ -180,9 +180,8 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
     job_description_analyzer = Agent(
         role="Job Description Analyzer",
         goal=(
-            "Extract and structure key information from job descriptions: "
-            "1) List of responsibilities, 2) Required skills and qualifications, "
-            "3) Company culture indicators, 4) Experience level requirements."
+            "Carefully read the job description to extract two things: 1) a structured list of job "
+            "responsibilities and 2) a structured list of required skills and qualifications."
         ),
         tools=[job_read_tool],
         verbose=True,
@@ -190,6 +189,21 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
             "You are an expert in deconstructing job postings. Your keen eye for detail lets you "
             "separate responsibilities from requirements so that other agents can act on your insights. "
             "Always organize information clearly and concisely."
+        )
+    )
+    job_description_analyzer = Agent(
+        role="Job Description Analyzer",
+        goal=(
+            "Extract and structure key information from job descriptions: "
+            "1) List of responsibilities, 2) Required skills and qualifications, "
+            "3) Company culture indicators, 4) Experience level requirements."
+        ),
+        tools=[semantic_mdx],
+        verbose=True,
+        backstory=(
+            "You are an expert in parsing job postings with precision. You use "
+            "semantic search and embeddings to identify and categorize job requirements "
+            "accurately. You structure information for downstream analysis."
         )
     )
     
@@ -231,18 +245,17 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
     recruitment_expert = Agent(
         role="Recruitment Assessment Expert",
         goal=(
-            "Perform quantitative and qualitative fit assessment: "
-            "1) Calculate a numerical fit score (0-100%), "
-            "2) Identify strengths and alignment areas, "
-            "3) Recognize gaps and weaknesses, "
-            "4) Determine fit category (High: 75%+, Medium: 50-74%, Low: <50%)."
+            "Assess candidate fit using the STRUCTURED JSON CV data.\n"
+            "You receive a JSON object with positions array - each position is strictly "
+            "separated by employer. Use this structure to provide accurate assessment.\n\n"
+            "Calculate fit score (0-100%), identify strengths and gaps, categorize fit level."
         ),
-        tools=[semantic_pdf, semantic_mdx],
+        tools=[cv_read_tool, job_read_tool],
         verbose=True,
         backstory=(
-            "As an experienced recruiter with expertise in candidate evaluation, you "
-            "assess fit holistically. You use retrieved context from both documents to "
-            "provide honest, data-driven assessments with specific percentage scores."
+            "You are an experienced recruiter skilled at reading structured data. You receive "
+            "clean JSON showing exactly which achievements belong to which employer. You use "
+            "this structured information to provide honest, data-driven assessments."
         )
     )
     
@@ -295,18 +308,18 @@ def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
     quality_assurance_agent = Agent(
         role="Quality Assurance Specialist",
         goal=(
-            "Review outputs for accuracy, consistency, and appropriateness: "
-            "1) Verify no fabricated experiences, "
-            "2) Ensure tone matches fit level, "
-            "3) Check alignment with original documents, "
-            "4) Validate persuasiveness within honest bounds."
+            "Verify outputs against the STRUCTURED JSON CV data.\n\n"
+            "PRIMARY CHECK: For each achievement in the revised CV or cover letter, "
+            "verify it appears under the correct employer in the source JSON.\n\n"
+            "Use the JSON as ground truth. If revised CV shows Achievement X under Employer A, "
+            "but JSON shows it under Employer B, flag as CRITICAL ERROR."
         ),
-        tools=[semantic_pdf, semantic_mdx],
+        tools=[cv_read_tool, job_read_tool],
         verbose=True,
         backstory=(
-            "You are the final gatekeeper ensuring quality and integrity. You verify "
-            "that outputs are truthful, well-crafted, and appropriately calibrated to "
-            "the candidate's actual fit level."
+            "You are a meticulous QA specialist with the source JSON as your reference. "
+            "You cross-check every claim against the structured data. You have zero tolerance "
+            "for misattribution and catch even subtle errors."
         )
     )
     
@@ -906,6 +919,7 @@ def main():
             "📋 Fit Assessment",
             "📄 Revised CV",
             "✉️ Cover Letter",
+            "✅ QA Report",
             "💾 Download All"
         ])
         
@@ -962,8 +976,11 @@ def main():
                 mime="text/markdown"
             )
         
-        
         with tab4:
+            st.markdown("### Quality Assurance Report")
+            st.markdown(st.session_state.results.get('qa_report', 'No QA report available'))
+        
+        with tab5:
             st.markdown("### Download All Documents")
             
             # Create combined document with proper assessment
@@ -972,6 +989,10 @@ def main():
 ## Fit Assessment
 {assessment}
 
+---
+
+## Quality Assurance Report
+{st.session_state.results.get('qa_report', 'No QA report available')}
 
 ---
 
