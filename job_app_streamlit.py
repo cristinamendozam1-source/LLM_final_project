@@ -480,9 +480,9 @@ def create_agents_and_tasks(cv_structured: Dict, job_description_text: str):
             "3) Professional Experience (use positions array)\n"
             "4) Education (summarized from JSON.education)\n"
             "5) Skills (from JSON.skills)\n"
-"IMPORTANT:\n"
-"- If dates or location are missing in the JSON for a position, simply OMIT those lines.\n"
-"- Do NOT write placeholders like '[Insert Dates]' or '[Insert Location]'.\n"
+            "IMPORTANT:\n"
+            "- If dates or location are missing in the JSON for a position, simply OMIT those lines.\n"
+            "- Do NOT write placeholders like '[Insert Dates]' or '[Insert Location]'.\n"
 
         ),
         
