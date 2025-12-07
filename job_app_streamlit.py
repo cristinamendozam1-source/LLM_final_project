@@ -272,6 +272,11 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         async_execution=False
     )
     
+    # Get output directory
+    output_dir = tempfile.gettempdir()
+    cv_output = os.path.join(output_dir, 'revised_cv.md')
+    cl_output = os.path.join(output_dir, 'cover_letter.md')
+    
     # STEP 3 TASKS: Adaptive Content Generation
     cv_revision_task = Task(
         description=(
@@ -289,7 +294,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "Always maintain truthfulness. Never fabricate experiences."
         ),
         expected_output="Revised CV in Markdown format, tone-appropriate for fit level",
-        output_file="revised_cv.md",
+        output_file=cv_output,
         agent=cv_strategist,
         context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
         async_execution=True
@@ -316,7 +321,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "Maintain professionalism throughout. Reference company mission when possible."
         ),
         expected_output="Professional cover letter 250-400 words, tone-matched to fit level",
-        output_file="cover_letter.md",
+        output_file=cl_output,
         agent=cover_letter_writer,
         context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
         async_execution=True
@@ -385,7 +390,7 @@ def main():
     This tool uses a multi-agent AI system with retrieval-augmented generation to:
     - Extract and analyze job requirements using embeddings
     - Assess candidate fit quantitatively and qualitatively
-    - Generate adaptive, honest application materials (CV and cover letter) based on fit level
+    - Generate adaptive, honest application materials based on fit level
     """)
     
     # API Setup
@@ -475,14 +480,38 @@ def main():
                 status_text.text("Step 3/3: Generating application materials...")
                 progress_bar.progress(100)
                 
-                # Read generated files
+                # Read generated files - try multiple possible locations
                 temp_dir = tempfile.gettempdir()
+                possible_locations = [
+                    temp_dir,
+                    os.getcwd(),
+                    '/mount/src/llm_final_project',
+                    '.'
+                ]
                 
-                with open(os.path.join(temp_dir, 'revised_cv.md'), 'r', encoding='utf-8') as f:
-                    revised_cv = f.read()
+                revised_cv = None
+                cover_letter = None
                 
-                with open(os.path.join(temp_dir, 'cover_letter.md'), 'r', encoding='utf-8') as f:
-                    cover_letter = f.read()
+                # Try to find the files
+                for location in possible_locations:
+                    cv_path = os.path.join(location, 'revised_cv.md')
+                    cl_path = os.path.join(location, 'cover_letter.md')
+                    
+                    if os.path.exists(cv_path) and os.path.exists(cl_path):
+                        with open(cv_path, 'r', encoding='utf-8') as f:
+                            revised_cv = f.read()
+                        with open(cl_path, 'r', encoding='utf-8') as f:
+                            cover_letter = f.read()
+                        break
+                
+                # If files not found, extract from crew result
+                if not revised_cv or not cover_letter:
+                    st.warning("⚠️ Output files not found in expected locations. Extracting from agent outputs...")
+                    result_str = str(result)
+                    
+                    # For now, use the full result as a placeholder
+                    revised_cv = "# Revised CV\n\n" + result_str
+                    cover_letter = "# Cover Letter\n\n" + result_str
                 
                 # Store results
                 st.session_state.results = {
