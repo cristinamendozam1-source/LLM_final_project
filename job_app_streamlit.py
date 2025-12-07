@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 import json
 from typing import Dict, List, Tuple
-import PyPDF2
 from crewai import Agent, Task, Crew
 from crewai_tools import PDFSearchTool, MDXSearchTool
 import warnings
