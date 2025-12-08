@@ -85,7 +85,6 @@ def setup_openai_api():
                 st.warning("⚠️ Please enter your OpenAI API key to continue")
                 return False
 
-# 🔹 CHANGED: no suffix arg, preserve original extension
 def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary directory and return path"""
     temp_dir = tempfile.gettempdir()
@@ -181,35 +180,30 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         )
     )
     
-    # STEP 3: Content Generation Agents (Adaptive)
+    # STEP 3: Content / Feedback Generation Agents (Adaptive)
     cv_strategist = Agent(
         role="Adaptive CV Strategist",
         goal=(
-            "Optimize CV presentation while maintaining 100% factual accuracy:\n"
+            "Provide detailed, actionable feedback on how to tweak and enhance the candidate's "
+            "existing CV so it better highlights their unique value proposition for the target job.\n\n"
+            "WHAT TO DELIVER:\n"
+            "1. High-level feedback on overall structure, clarity, and narrative.\n"
+            "2. Section-by-section suggestions (Summary, Experience, Education, Skills, etc.).\n"
+            "3. Bullet-level suggestions for key roles (what to emphasize, what to rephrase, where to quantify).\n"
+            "4. Suggestions on ordering, grouping, and emphasis to better match the job description.\n"
+            "5. Concrete examples of improved bullet points (but do NOT rewrite the entire CV).\n\n"
             "CRITICAL RULES:\n"
-            "1. NEVER move experiences between different employers or organizations\n"
-            "2. NEVER combine or merge information from different positions\n"
-            "3. NEVER add achievements that aren't in the original CV\n"
-            "4. PRESERVE all original experiences, dates, and organizational details\n"
-            "5. Keep ALL bullet points and details from the original CV\n\n"
-            "WHAT TO DO:\n"
-            "- Reorder bullet points to lead with most relevant achievements\n"
-            "- Adjust phrasing to emphasize alignment (without changing facts)\n"
-            "- Add context that connects experiences to job requirements\n"
-            "- Strengthen action verbs while keeping original meaning\n"
-            "- Highlight transferable skills in descriptions\n\n"
-            "APPROACH BY FIT LEVEL:\n"
-            "- HIGH FIT (75%+): Lead with strongest direct alignments, confident tone\n"
-            "- MEDIUM/LOW FIT (<75%): Emphasize transferable skills, growth potential"
+            "- DO NOT fabricate or invent new experiences or achievements.\n"
+            "- DO NOT move experiences between employers.\n"
+            "- Focus on sharpening language, highlighting relevant achievements, and clarifying impact.\n"
+            "- Emphasize the candidate's unique value proposition for this specific role.\n"
         ),
         tools=[semantic_pdf, semantic_mdx],
         verbose=True,
         backstory=(
-            "You are a meticulous CV editor who treats candidate information as sacred. "
-            "You understand that fabrication or mixing up experiences is unethical and harmful. "
-            "Your expertise is in strategic presentation - reframing and reordering existing "
-            "content to maximize impact while maintaining complete factual accuracy. You NEVER "
-            "move achievements between different employers or positions."
+            "You are a meticulous CV coach. Rather than rewriting documents, you give precise, "
+            "targeted feedback that helps candidates revise their own CVs. You explain what to change, "
+            "why it matters for the role, and provide example phrasings while respecting factual accuracy."
         )
     )
     
@@ -252,10 +246,10 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         role="Quality Assurance Specialist",
         goal=(
             "Review outputs for accuracy, consistency, and appropriateness: "
-            "1) Verify no fabricated experiences, "
+            "1) Verify no fabricated experiences are suggested, "
             "2) Ensure tone matches fit level, "
             "3) Check alignment with original documents, "
-            "4) Validate persuasiveness within honest bounds."
+            "4) Validate that CV feedback is actionable and respectful of candidate constraints."
         ),
         tools=[semantic_pdf, semantic_mdx],
         verbose=True,
@@ -266,7 +260,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         )
     )
     
-    # Create Tasks with clear step separation
+    # STEP 1 TASKS: Extraction
     job_extraction_task = Task(
         description=(
             f"Analyze the job description at {job_desc_path}. "
@@ -320,6 +314,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         async_execution=False
     )
     
+    # STEP 2 TASK: Assessment
     fit_assessment_task = Task(
         description=(
             "Based on extracted job requirements and CV information:\n"
@@ -355,60 +350,44 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         async_execution=False
     )
     
-    output_dir = tempfile.gettempdir()
-    cv_output = os.path.join(output_dir, 'revised_cv.md')
-    cl_output = os.path.join(output_dir, 'cover_letter.md')
-    
-    cv_revision_task = Task(
+    # STEP 3 TASKS: CV Feedback and Cover Letter
+    cv_feedback_task = Task(
         description=(
-            "Create an optimized CV that maintains complete factual accuracy.\n\n"
-            "STEP 1 - EXTRACT ORIGINAL STRUCTURE:\n"
-            "Carefully read the original CV and note:\n"
-            "- Every employer/organization name with exact dates\n"
-            "- Every position title\n"
-            "- Every single bullet point and achievement under each position\n"
-            "- Education, skills, and other sections\n\n"
-            "STEP 2 - ANALYZE JOB ALIGNMENT:\n"
-            "Identify which experiences are most relevant to the job requirements.\n\n"
-            "STEP 3 - STRATEGIC REFRAMING (NOT REWRITING):\n"
-            "For each position in the ORIGINAL CV:\n"
-            "- Keep the EXACT employer name, position title, and dates\n"
-            "- Include ALL original bullet points (don't remove content)\n"
-            "- Reorder bullets to lead with most job-relevant items\n"
-            "- Adjust phrasing to highlight alignment WITHOUT changing facts\n"
-            "- Add brief context phrases that connect to job requirements\n\n"
-            "CRITICAL RULES:\n"
-            "❌ NEVER move an achievement from Company A to Company B\n"
-            "❌ NEVER combine experiences from different positions\n"
-            "❌ NEVER add achievements not in the original CV\n"
-            "❌ NEVER remove substantial content\n"
-            "✅ DO reorder bullets within each position\n"
-            "✅ DO adjust phrasing to emphasize relevance\n"
-            "✅ DO add brief connective phrases\n"
-            "✅ DO strengthen action verbs while keeping meaning\n\n"
-            "TONE BY FIT LEVEL:\n"
-            "- HIGH FIT (75%+): Confident, achievement-focused language\n"
-            "- MEDIUM/LOW FIT (<75%): Emphasize transferable skills and growth potential\n\n"
-            "OUTPUT FORMAT:\n"
-            "Use clear markdown with sections for:\n"
-            "- Professional Summary (brief, tailored to role)\n"
-            "- Professional Experience (maintain chronological order from original)\n"
-            "- Education\n"
-            "- Skills\n"
-            "- Any other sections from original CV"
+            "Provide detailed, actionable feedback on how to tweak and enhance the candidate's "
+            "existing CV so it better matches the job description.\n\n"
+            "USE AS INPUT:\n"
+            "- Parsed CV information\n"
+            "- Job requirements\n"
+            "- Fit assessment\n\n"
+            "STRUCTURE YOUR OUTPUT AS MARKDOWN WITH THESE SECTIONS:\n"
+            "## 1. Overall Impression\n"
+            "- Briefly summarize how well the current CV markets the candidate for this role.\n\n"
+            "## 2. Unique Value Proposition\n"
+            "- Explain what makes this candidate stand out for this role and how to emphasize that.\n\n"
+            "## 3. Section-by-Section Feedback\n"
+            "- For each section (Summary/Profile, Experience, Education, Skills, Other):\n"
+            "  - What works well\n"
+            "  - What could be improved\n"
+            "  - Concrete suggestions (e.g., 'Move X higher', 'Group Y with Z', 'Clarify impact').\n\n"
+            "## 4. Bullet-Level Suggestions for Key Roles\n"
+            "- For the 2-3 most relevant roles:\n"
+            "  - Identify 1-3 bullets that could be stronger\n"
+            "  - Suggest improved, example bullet phrasings (do NOT rewrite the entire CV).\n\n"
+            "## 5. Tailoring to This Job\n"
+            "- Explain exactly what to tweak to align better with the job description "
+            "(e.g., emphasize certain skills, add metrics, reframe certain projects).\n\n"
+            "RULES:\n"
+            "- DO NOT invent new experiences or achievements.\n"
+            "- DO NOT move experiences between employers.\n"
+            "- Focus on clarity, impact, quantification, and alignment."
         ),
         expected_output=(
-            "Complete CV in Markdown format that:\n"
-            "1. Preserves ALL original employers, positions, dates, and achievements\n"
-            "2. Reorders content strategically without fabrication\n"
-            "3. Uses language that emphasizes job alignment\n"
-            "4. Maintains 100% factual accuracy\n"
-            "5. Includes all details from original CV"
+            "Markdown document with structured, actionable feedback that the candidate can use "
+            "to manually edit and improve their existing CV for this specific job."
         ),
-        output_file=cv_output,
         agent=cv_strategist,
         context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
-        async_execution=True
+        async_execution=False
     )
     
     cover_letter_task = Task(
@@ -427,10 +406,6 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "- VERIFY it's from the CV extraction\n"
             "- CONFIRM which employer/organization it's associated with\n"
             "- STATE the employer name correctly when referencing the achievement\n\n"
-            "Example CORRECT format:\n"
-            "'In my role as [Position] at [Correct Employer], I [achievement]...'\n\n"
-            "Example INCORRECT (DO NOT DO THIS):\n"
-            "'At [Company A], I achieved [something that actually happened at Company B]'\n\n"
             "TONE BY FIT LEVEL:\n\n"
             "IF FIT SCORE >= 75% (HIGH FIT):\n"
             "- Open with confidence and specific alignment to role\n"
@@ -475,70 +450,52 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "4. Maintains complete factual accuracy\n"
             "5. Is compelling within honest bounds"
         ),
-        output_file=cl_output,
         agent=cover_letter_writer,
         context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
-        async_execution=True
+        async_execution=False
     )
     
     qa_task = Task(
         description=(
-            "Conduct thorough quality assurance review:\n\n"
-            "STEP 1 - FACTUAL VERIFICATION:\n"
-            "Cross-reference the revised CV with the original CV line by line:\n"
-            "- Check EVERY employer name is exactly correct\n"
-            "- Verify EVERY achievement is under the correct employer\n"
-            "- Confirm NO experiences were moved between different positions/companies\n"
-            "- Validate ALL dates match the original\n\n"
-            "STEP 2 - COMPLETENESS CHECK:\n"
-            "- Verify ALL positions from original CV are included\n"
-            "- Confirm ALL major achievements are preserved\n"
-            "- Check that detail level is maintained\n\n"
-            "STEP 3 - QUALITY ASSESSMENT:\n"
-            "- Tone appropriateness for fit level\n"
-            "- Grammar and professionalism\n"
-            "- Formatting consistency\n"
-            "- Overall persuasiveness\n\n"
-            "STEP 4 - COVER LETTER ACCURACY CHECK:\n"
-            "For EACH achievement or experience mentioned in the cover letter:\n"
-            "- Cross-reference with CV extraction\n"
-            "- Verify the employer name is correct\n"
-            "- Confirm no achievements were misattributed\n"
-            "- Check that all claims are factually accurate\n\n"
-            "STEP 5 - COVER LETTER QUALITY:\n"
-            "- Appropriate tone for fit level\n"
-            "- Professional quality and grammar\n"
-            "- Persuasive within honest bounds\n"
-            "- Proper business letter format\n\n"
+            "Conduct thorough quality assurance review of the CV feedback, fit assessment, "
+            "and cover letter:\n\n"
+            "1. FACTUAL VERIFICATION:\n"
+            "- Ensure no suggested changes imply fabricated or non-existent experiences.\n"
+            "- Confirm examples of improved bullets stay within the facts of the CV.\n\n"
+            "2. CONSISTENCY & ALIGNMENT:\n"
+            "- Check that CV feedback, fit assessment, and cover letter are consistent with each other.\n"
+            "- Verify that all three align with the job description.\n\n"
+            "3. ACTIONABILITY OF CV FEEDBACK:\n"
+            "- Ensure feedback is concrete and specific (not vague).\n"
+            "- Confirm the user could realistically implement the suggestions.\n\n"
+            "4. TONE & PROFESSIONALISM:\n"
+            "- Confirm tone is supportive, professional, and appropriate to the fit level.\n\n"
             "OUTPUT FORMAT:\n"
             "Approval Status: [Approved / Approved with Minor Revisions / Major Revisions Required]\n\n"
-            "1. Verification of Fabricated Information:\n"
-            "   [Confirm each employer's achievements are correct or list discrepancies]\n\n"
-            "2. Tone Appropriateness for Fit Level:\n"
-            "   [Assessment]\n\n"
-            "3. Consistency with Original Documents:\n"
-            "   [Verification results]\n\n"
-            "4. Cover Letter Accuracy:\n"
-            "   [Verify each achievement is attributed to correct employer]\n\n"
-            "5. Grammar and Professionalism:\n"
-            "   [Notes and suggestions]\n\n"
-            "6. Persuasiveness within Honest Bounds:\n"
-            "   [Assessment]\n\n"
+            "1. Factual Accuracy:\n"
+            "   [Summary]\n\n"
+            "2. Consistency Across Outputs:\n"
+            "   [Summary]\n\n"
+            "3. CV Feedback Quality:\n"
+            "   [Summary]\n\n"
+            "4. Cover Letter Quality:\n"
+            "   [Summary]\n\n"
             "Revision Notes:\n"
             "[If needed, specific actionable revisions]"
         ),
         expected_output=(
             "Detailed QA report with approval status and verification that:\n"
             "- No information was fabricated or misattributed\n"
-            "- All content is factually accurate\n"
+            "- CV feedback is actionable and respectful of constraints\n"
             "- Tone is appropriate\n"
             "- Quality standards are met"
         ),
         agent=quality_assurance_agent,
-        context=[cv_revision_task, cover_letter_task, fit_assessment_task],
+        context=[cv_feedback_task, cover_letter_task, fit_assessment_task],
         async_execution=False
     )
     
+    # Create and return crew
     crew = Crew(
         agents=[
             job_description_analyzer,
@@ -552,7 +509,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             job_extraction_task,
             cv_extraction_task,
             fit_assessment_task,
-            cv_revision_task,
+            cv_feedback_task,
             cover_letter_task,
             qa_task
         ],
@@ -571,6 +528,7 @@ def extract_fit_score(assessment_text: str) -> Tuple[int, str]:
         category = "HIGH"
     elif score >= 50:
         category = "MEDIUM"
+        #
     else:
         category = "LOW"
     
@@ -583,14 +541,17 @@ def main():
     This tool uses a multi-agent AI system with retrieval-augmented generation to:
     - Extract and analyze job requirements using embeddings
     - Assess candidate fit quantitatively and qualitatively
-    - Generate adaptive, honest application materials based on fit level
+    - Provide targeted feedback to strengthen your CV for a specific job
+    - Generate a tailored, factually accurate cover letter
     """)
     
+    # API Setup
     if not setup_openai_api():
         st.stop()
     
     st.success("✅ API configured successfully")
     
+    # Main input section
     st.markdown('<div class="section-header">📄 Upload Your Documents</div>', 
                 unsafe_allow_html=True)
     
@@ -598,7 +559,7 @@ def main():
     
     with col1:
         st.subheader("Your Resume/CV")
-        # 🔹 CHANGED: only Word or text
+        # Only Word or text
         resume_file = st.file_uploader(
             "Upload your CV (Word or text format)",
             type=['docx', 'txt'],
@@ -619,14 +580,14 @@ def main():
                 help="Copy and paste the full job posting"
             )
         else:
-            # 🔹 CHANGED: only text/markdown/Word, no PDF
             job_file = st.file_uploader(
                 "Upload job description",
                 type=['txt', 'md', 'docx'],
                 help="Upload job description in text, markdown, or Word (.docx) format"
             )
     
-    if st.button("🚀 Analyze and Generate Application Materials", type="primary"):
+    # Process button
+    if st.button("🚀 Analyze and Generate Feedback & Materials", type="primary"):
         if not resume_file:
             st.error("❌ Please upload your resume")
             return
@@ -640,7 +601,7 @@ def main():
         
         with st.spinner("🔄 Processing your application... This may take a few minutes."):
             try:
-                # Save resume (keeps original extension)
+                # Save resume
                 resume_path = save_uploaded_file(resume_file)
                 
                 # Save job description
@@ -649,15 +610,17 @@ def main():
                 else:
                     job_desc_path = save_uploaded_file(job_file)
                 
+                # Create progress indicators
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
                 status_text.text("Step 1/3: Extracting information from documents...")
                 progress_bar.progress(33)
                 
+                # Create and run crew
                 crew = create_agents_and_tasks(resume_path, job_desc_path)
                 
-                status_text.text("Step 2/3: Assessing candidate fit...")
+                status_text.text("Step 2/3: Assessing candidate fit and drafting outputs...")
                 progress_bar.progress(66)
                 
                 inputs = {
@@ -667,50 +630,28 @@ def main():
                 
                 result = crew.kickoff(inputs=inputs)
                 
-                status_text.text("Step 3/3: Generating application materials...")
+                status_text.text("Step 3/3: Finalizing feedback and materials...")
                 progress_bar.progress(100)
                 
+                # Extract individual task outputs
                 task_outputs = {}
                 for task in crew.tasks:
                     if hasattr(task, 'output') and task.output:
                         task_outputs[task.agent.role] = str(task.output)
                 
+                # Get specific outputs
                 fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
+                cv_feedback_output = task_outputs.get('Adaptive CV Strategist', 'No CV feedback generated.')
+                cover_letter_output = task_outputs.get('Adaptive Cover Letter Writer', 'No cover letter generated.')
+                qa_output = task_outputs.get('Quality Assurance Specialist', str(result))
                 
-                temp_dir = tempfile.gettempdir()
-                possible_locations = [
-                    temp_dir,
-                    os.getcwd(),
-                    '/mount/src/llm_final_project',
-                    '.'
-                ]
-                
-                revised_cv = None
-                cover_letter = None
-                
-                for location in possible_locations:
-                    cv_path = os.path.join(location, 'revised_cv.md')
-                    cl_path = os.path.join(location, 'cover_letter.md')
-                    
-                    if os.path.exists(cv_path) and os.path.exists(cl_path):
-                        with open(cv_path, 'r', encoding='utf-8') as f:
-                            revised_cv = f.read()
-                        with open(cl_path, 'r', encoding='utf-8') as f:
-                            cover_letter = f.read()
-                        break
-                
-                if not revised_cv or not cover_letter:
-                    st.warning("⚠️ Output files not found in expected locations. Extracting from agent outputs...")
-                    result_str = str(result)
-                    revised_cv = "# Revised CV\n\n" + result_str
-                    cover_letter = "# Cover Letter\n\n" + result_str
-                
+                # Store results with timestamp
                 from datetime import datetime
                 st.session_state.results = {
                     'assessment': fit_assessment_output,
-                    'revised_cv': revised_cv,
-                    'cover_letter': cover_letter,
-                    'qa_report': str(result),
+                    'cv_feedback': cv_feedback_output,
+                    'cover_letter': cover_letter_output,
+                    'qa_report': qa_output,
                     'all_outputs': task_outputs
                 }
                 st.session_state.generation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -724,13 +665,16 @@ def main():
                 st.exception(e)
                 return
     
+    # Display results
     if st.session_state.processing_complete and st.session_state.results:
         st.markdown("---")
         st.markdown('<div class="section-header">📊 Results</div>', unsafe_allow_html=True)
         
+        # Extract fit score
         assessment = st.session_state.results['assessment']
         fit_score, fit_category = extract_fit_score(assessment)
         
+        # Display fit score with color coding
         fit_class = "high-fit" if fit_category == "HIGH" else "medium-fit" if fit_category == "MEDIUM" else "low-fit"
         st.markdown(f'''
             <div class="fit-score {fit_class}">
@@ -739,9 +683,10 @@ def main():
             </div>
         ''', unsafe_allow_html=True)
         
+        # Tabs for different outputs
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📋 Fit Assessment",
-            "📄 Revised CV",
+            "🛠️ CV Feedback",
             "✉️ Cover Letter",
             "✅ QA Report",
             "💾 Download All"
@@ -751,6 +696,7 @@ def main():
             st.markdown("### Detailed Fit Assessment")
             st.markdown(assessment)
             
+            # Show breakdown if available
             if 'all_outputs' in st.session_state.results:
                 with st.expander("📊 View Detailed Analysis"):
                     job_analysis = st.session_state.results['all_outputs'].get('Job Description Analyzer', 'N/A')
@@ -762,17 +708,21 @@ def main():
                     st.markdown("---")
                     
                     st.markdown("#### Candidate Profile Summary:")
-                    st.info("💡 **Use this to verify accuracy:** Check that all achievements in your revised CV and cover letter match the organizations listed here.")
+                    st.info("💡 **Use this to verify accuracy:** Check that the feedback and cover letter match the experiences and employers listed here.")
                     st.markdown(cv_analysis)
         
         with tab2:
-            st.markdown("### Your Tailored CV")
-            st.info("⚠️ **Important:** Always review the CV carefully to ensure all information is accurate and no experiences were misattributed between employers.")
-            st.markdown(st.session_state.results['revised_cv'])
+            st.markdown("### Feedback on Your CV")
+            st.info(
+                "🔧 **How to use this:** Go back to your original CV file and apply the suggestions "
+                "manually—especially around ordering, bullet phrasing, and quantification. "
+                "The tool does not overwrite your CV; it guides you on how to improve it."
+            )
+            st.markdown(st.session_state.results['cv_feedback'])
             st.download_button(
-                label="⬇️ Download CV",
-                data=st.session_state.results['revised_cv'],
-                file_name="revised_cv.md",
+                label="⬇️ Download CV Feedback",
+                data=st.session_state.results['cv_feedback'],
+                file_name="cv_feedback.md",
                 mime="text/markdown"
             )
         
@@ -806,8 +756,8 @@ def main():
 
 ---
 
-## Revised CV
-{st.session_state.results['revised_cv']}
+## CV Feedback
+{st.session_state.results['cv_feedback']}
 
 ---
 
@@ -826,6 +776,7 @@ def main():
                 mime="text/markdown"
             )
     
+    # Sidebar information
     with st.sidebar:
         st.markdown("### 📖 How It Works")
         st.markdown("""
@@ -838,10 +789,9 @@ def main():
         - Strength/gap identification
         - Category assignment
         
-        **Step 3: Adaptive Generation**
-        - High Fit (75%+): Confident materials
-        - Medium Fit (50-74%): Balanced approach
-        - Low Fit (<50%): Honest, growth-focused
+        **Step 3: Tailored Support**
+        - Targeted feedback to improve your existing CV
+        - Factually accurate cover letter for this role
         """)
         
         st.markdown("---")
@@ -849,12 +799,13 @@ def main():
         st.info("Your documents are processed temporarily and not stored permanently.")
         
         st.markdown("---")
-        st.markmarkdown("### 💡 Tips")
+        st.markdown("### 💡 Tips")
         st.markdown("""
         - Use a clear, well-formatted CV in .docx or .txt
         - Include complete job descriptions
+        - Apply the CV feedback directly in your original document
         - Review generated materials before sending
-        - Adjust based on your authentic voice
+        - Adjust language to match your authentic voice
         """)
 
 if __name__ == "__main__":
