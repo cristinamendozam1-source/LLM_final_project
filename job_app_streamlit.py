@@ -1,38 +1,24 @@
-# app.py
-# ---------------------------------------------------------
-# AI Job Application Assistant (Final Project Version)
-# ---------------------------------------------------------
-# Requirements (in requirements.txt):
-#   streamlit
-#   crewai[tools]
-#   PyPDF2
-#   python-docx
-#   langchain-community (if you use elsewhere)
-# ---------------------------------------------------------
-
-import os
-import json
-import re
-import tempfile
-from typing import Dict, Tuple
-
 import streamlit as st
-import PyPDF2
-from docx import Document
+import os
+import tempfile
+from pathlib import Path
+import json
+from typing import Dict, List, Tuple
+from docx import Document  # python-docx library
 from crewai import Agent, Task, Crew
-
+from crewai_tools import FileReadTool
 import warnings
-warnings.filterwarnings("ignore")
+import re
+warnings.filterwarnings('ignore')
 
-# ---------------------------------------------------------
-# Streamlit Page Configuration & CSS
-# ---------------------------------------------------------
+# Page configuration
 st.set_page_config(
     page_title="AI Job Application Assistant",
     page_icon="💼",
     layout="wide"
 )
 
+# Custom CSS for better styling
 st.markdown("""
     <style>
     .main-header {
@@ -71,22 +57,56 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# Session State
-# ---------------------------------------------------------
-if "processing_complete" not in st.session_state:
+# Initialize session state
+if 'processing_complete' not in st.session_state:
     st.session_state.processing_complete = False
-if "results" not in st.session_state:
+if 'results' not in st.session_state:
     st.session_state.results = None
 
-# ---------------------------------------------------------
-# OpenAI API Setup
-# ---------------------------------------------------------
-def setup_openai_api() -> bool:
-    """Configure OpenAI API from Streamlit secrets or user input."""
-    if "OPENAI_API_KEY" in st.secrets:
-        os.environ["OPENAI_API_KEY"] = st.secrets["OPENAI_API_KEY"]
-        os.environ["OPENAI_MODEL_NAME"] = st.secrets.get("OPENAI_MODEL_NAME", "gpt-4o-mini")
+def extract_text_from_docx(docx_path: str) -> str:
+    """
+    Extract complete text from Word document preserving structure.
+    """
+    try:
+        doc = Document(docx_path)
+        text = ""
+        for paragraph in doc.paragraphs:
+            text += paragraph.text + "\n"
+        return text
+    except Exception as e:
+        st.error(f"Error reading Word document: {str(e)}")
+        return ""
+
+def extract_text_from_file(file_path: str, file_type: str) -> str:
+    """
+    Extract text from Word documents or text files.
+    """
+    if file_type in ['docx', 'doc']:
+        return extract_text_from_docx(file_path)
+    elif file_type in ['txt', 'md']:
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except Exception as e:
+            st.error(f"Error reading text file: {str(e)}")
+            return ""
+    else:
+        st.error(f"Unsupported file type: {file_type}")
+        return ""
+
+def save_text_as_file(text: str, filename: str) -> str:
+    """Save text content to a file and return path"""
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, filename)
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        f.write(text)
+    return temp_path
+
+def setup_openai_api():
+    """Configure OpenAI API from Streamlit secrets or user input"""
+    if 'OPENAI_API_KEY' in st.secrets:
+        os.environ['OPENAI_API_KEY'] = st.secrets['OPENAI_API_KEY']
+        os.environ['OPENAI_MODEL_NAME'] = st.secrets.get('OPENAI_MODEL_NAME', 'gpt-4o-mini')
         return True
     else:
         with st.sidebar:
@@ -98,403 +118,450 @@ def setup_openai_api() -> bool:
                 index=0
             )
             if api_key:
-                os.environ["OPENAI_API_KEY"] = api_key
-                os.environ["OPENAI_MODEL_NAME"] = model_name
+                os.environ['OPENAI_API_KEY'] = api_key
+                os.environ['OPENAI_MODEL_NAME'] = model_name
                 return True
             else:
                 st.warning("⚠️ Please enter your OpenAI API key to continue")
                 return False
 
-# ---------------------------------------------------------
-# File Helpers
-# ---------------------------------------------------------
 def save_uploaded_file(uploaded_file) -> str:
-    """Save uploaded file to temporary directory and return path."""
+    """Save uploaded file to temporary directory and return path"""
+    try:
+        temp_dir = tempfile.gettempdir()
+        # Use original filename to preserve extension
+        temp_path = os.path.join(temp_dir, f"uploaded_{uploaded_file.name}")
+        with open(temp_path, 'wb') as f:
+            f.write(uploaded_file.getbuffer())
+        return temp_path
+    except Exception as e:
+        st.error(f"Error saving uploaded file: {str(e)}")
+        return ""
+
+def save_text_as_markdown(text: str, filename: str):
+    """Save text content as markdown file"""
     temp_dir = tempfile.gettempdir()
-    temp_path = os.path.join(temp_dir, f"uploaded_{uploaded_file.name}")
-    with open(temp_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
+    temp_path = os.path.join(temp_dir, filename)
+    with open(temp_path, 'w', encoding='utf-8') as f:
+        f.write(text)
     return temp_path
 
-def extract_text_from_pdf(pdf_path: str) -> str:
-    """Extract text from a PDF file."""
+def create_agents_and_tasks(cv_text_path: str, job_desc_path: str):
+    """Create the multi-agent system with step-by-step workflow"""
+    
+    # Initialize tools - use FileReadTool for structured text
     try:
-        with open(pdf_path, "rb") as file:
-            reader = PyPDF2.PdfReader(file)
-            text = ""
-            for page in reader.pages:
-                text += (page.extract_text() or "") + "\n"
-        return text
+        cv_read_tool = FileReadTool(file_path=cv_text_path)
+        job_read_tool = FileReadTool(file_path=job_desc_path)
     except Exception as e:
-        st.error(f"Error reading PDF: {str(e)}")
-        return ""
-
-def extract_text_from_docx(docx_path: str) -> str:
-    """Extract text from a Word document."""
-    try:
-        doc = Document(docx_path)
-        text = ""
-        for paragraph in doc.paragraphs:
-            text += paragraph.text + "\n"
-        return text
-    except Exception as e:
-        st.error(f"Error reading Word document: {str(e)}")
-        return ""
-
-def extract_text_from_file(path: str, ext: str) -> str:
-    """Extract text based on file extension."""
-    ext = ext.lower()
-    if ext == "pdf":
-        return extract_text_from_pdf(path)
-    elif ext in ["docx", "doc"]:
-        return extract_text_from_docx(path)
-    elif ext in ["txt", "md"]:
-        try:
-            with open(path, "r", encoding="utf-8", errors="ignore") as f:
-                return f.read()
-        except Exception as e:
-            st.error(f"Error reading text file: {str(e)}")
-            return ""
-    else:
-        st.error(f"Unsupported file type: {ext}")
-        return ""
-
-def markdown_to_docx(md_text: str, filename: str) -> str:
-    """
-    Convert simple Markdown/plain text to a .docx file.
-    Each line becomes a paragraph; headers are just plain bold text stripped of '#'.
-    """
-    doc = Document()
-    for raw_line in md_text.split("\n"):
-        line = raw_line.lstrip("#").strip()
-        doc.add_paragraph(line)
-    temp_path = os.path.join(tempfile.gettempdir(), filename)
-    doc.save(temp_path)
-    return temp_path
-
-# ---------------------------------------------------------
-# Deterministic CV Parser (No LLM)
-# ---------------------------------------------------------
-def parse_cv_text_to_structured_json(cv_text: str) -> Dict:
-    """
-    Deterministic parser: group bullets under the employer header that precedes them.
-    Works best for CVs like:
-
-    EXPERIENCE
-    Instiglio – Consulting firm in international development
-    Senior Associate, Nairobi, Kenya March 2024 – June 2024
-    • Bullet 1
-    • Bullet 2
-    ...
-    """
-    lines = [l.strip() for l in cv_text.split("\n") if l.strip()]
-    structured = {
-        "positions": [],
-        "education": [],
-        "skills": {"technical": [], "soft": []}
-    }
-
-    current_section = None
-    current_pos = None
-
-    for line in lines:
-        upper = line.upper()
-
-        # Section detection
-        if upper.startswith("EXPERIENCE"):
-            current_section = "experience"
-            continue
-        if upper.startswith("EDUCATION"):
-            current_section = "education"
-            continue
-        if "SPECIFIC SKILLS" in upper or upper.startswith("SKILLS"):
-            current_section = "skills"
-            continue
-
-        if current_section == "experience":
-            # New employer line heuristic: has a dash and not a bullet
-            if not line.startswith("•") and ("–" in line or " - " in line):
-                # Finish previous position
-                if current_pos is not None:
-                    structured["positions"].append(current_pos)
-                # Start new
-                current_pos = {
-                    "employer": line,
-                    "title": "",
-                    "dates": "",
-                    "location": "",
-                    "responsibilities": []
-                }
-                continue
-
-            # Title/dates line: first non-bullet after employer
-            if current_pos is not None and not line.startswith("•") and current_pos["title"] == "":
-                current_pos["title"] = line
-                m = re.search(r"(\d{4}.*)$", line)
-                if m:
-                    current_pos["dates"] = m.group(1).strip()
-                continue
-
-            # Bullet line
-            if current_pos is not None and line.startswith("•"):
-                bullet = line.lstrip("•").strip()
-                if bullet:
-                    current_pos["responsibilities"].append(bullet)
-                continue
-
-            # Continuation line for last bullet
-            if current_pos is not None and current_pos["responsibilities"]:
-                current_pos["responsibilities"][-1] += " " + line
-                continue
-
-        elif current_section == "education":
-            structured["education"].append(line)
-
-        elif current_section == "skills":
-            raw_pieces = re.split(r"[|,]", line)
-            for p in raw_pieces:
-                s = p.strip()
-                if not s:
-                    continue
-                if any(x in s.lower() for x in ["stata", "excel", "powerpoint", "python", "software", "data"]):
-                    structured["skills"]["technical"].append(s)
-                else:
-                    structured["skills"]["soft"].append(s)
-
-    # Add last position if exists
-    if current_pos is not None:
-        structured["positions"].append(current_pos)
-
-    return structured
-
-# ---------------------------------------------------------
-# Fit Score Helper
-# ---------------------------------------------------------
-def extract_fit_score(assessment_text: str) -> Tuple[int, str]:
-    """Extract fit score and category from assessment text."""
-    m = re.search(r"(\d+)%", assessment_text)
-    if m:
-        score = int(m.group(1))
-    else:
-        score = 50
-
-    if score >= 75:
-        category = "HIGH"
-    elif score >= 50:
-        category = "MEDIUM"
-        pass
-    else:
-        category = "LOW"
-    return score, category
-
-# ---------------------------------------------------------
-# crewAI Agents & Tasks
-# ---------------------------------------------------------
-def create_agents_and_tasks(cv_structured: Dict, job_description_text: str):
-    """Create crewAI agents and tasks using structured CV JSON (no LLM parsing)."""
-
-    cv_json = json.dumps(cv_structured, indent=2)
-
-    # Agents
+        st.error(f"Error initializing file reading tools: {str(e)}")
+        raise
+    
+    # STEP 1: Information Extraction Agents
+    job_description_analyzer = Agent(
+        role="Job Description Analyzer",
+        goal=(
+            "Carefully read the job description to extract two things: 1) a structured list of job "
+            "responsibilities and 2) a structured list of required skills and qualifications."
+        ),
+        tools=[job_read_tool],
+        verbose=True,
+        backstory=(
+            "You are an expert in deconstructing job postings. Your keen eye for detail lets you "
+            "separate responsibilities from requirements so that other agents can act on your insights. "
+            "Always organize information clearly and concisely."
+        )
+    )
     job_description_analyzer = Agent(
         role="Job Description Analyzer",
         goal=(
             "Extract and structure key information from job descriptions: "
-            "responsibilities and required skills/qualifications."
+            "1) List of responsibilities, 2) Required skills and qualifications, "
+            "3) Company culture indicators, 4) Experience level requirements."
         ),
-        tools=[],
+        tools=[semantic_mdx],
         verbose=True,
         backstory=(
-            "You are an expert in reading job postings and summarizing what matters. "
-            "You separate responsibilities from requirements clearly."
+            "You are an expert in parsing job postings with precision. You use "
+            "semantic search and embeddings to identify and categorize job requirements "
+            "accurately. You structure information for downstream analysis."
         )
     )
-
+    
+    cv_parser = Agent(
+        role="CV Parser and Analyzer",
+        goal=(
+            "Parse CV text into a STRICTLY STRUCTURED format that preserves employer boundaries.\n\n"
+            "OUTPUT MUST BE VALID JSON with this exact structure:\n"
+            "{\n"
+            '  "positions": [\n'
+            "    {\n"
+            '      "employer": "Exact company/org name",\n'
+            '      "title": "Exact position title",\n'
+            '      "dates": "Exact date range",\n'
+            '      "location": "City, Country",\n'
+            '      "responsibilities": [\n'
+            '        "Bullet point 1 exactly as written",\n'
+            '        "Bullet point 2 exactly as written"\n'
+            "      ]\n"
+            "    }\n"
+            "  ],\n"
+            '  "education": [...],\n'
+            '  "skills": [...]\n'
+            "}\n\n"
+            "CRITICAL: Each position object contains ONLY content from that specific employer. "
+            "Never mix content across positions. Preserve exact wording and order."
+        ),
+        tools=[cv_read_tool],
+        verbose=True,
+        backstory=(
+            "You are a meticulous data parser who outputs ONLY valid JSON. You understand that "
+            "mixing content between employers is catastrophic. You read the CV text sequentially "
+            "and group all content under the correct employer heading. Your JSON output is the "
+            "single source of truth for downstream agents."
+        )
+    )
+    
+    # STEP 2: Assessment Agent
     recruitment_expert = Agent(
         role="Recruitment Assessment Expert",
         goal=(
-            "Assess how well the structured CV JSON matches the job description, "
-            "and produce a fit score and narrative."
+            "Assess candidate fit using the STRUCTURED JSON CV data.\n"
+            "You receive a JSON object with positions array - each position is strictly "
+            "separated by employer. Use this structure to provide accurate assessment.\n\n"
+            "Calculate fit score (0-100%), identify strengths and gaps, categorize fit level."
         ),
-        tools=[],
+        tools=[cv_read_tool, job_read_tool],
         verbose=True,
         backstory=(
-            "You are an experienced recruiter. You work from structured data (JSON) "
-            "so you can see exactly which bullets belong to which employer."
+            "You are an experienced recruiter skilled at reading structured data. You receive "
+            "clean JSON showing exactly which achievements belong to which employer. You use "
+            "this structured information to provide honest, data-driven assessments."
         )
     )
-
+    
+    # STEP 3: Content Generation Agents (Adaptive)
     cv_strategist = Agent(
         role="Adaptive CV Strategist",
         goal=(
-            "Rewrite the CV ONLY by reordering and lightly rephrasing bullets within each job, "
-            "preserving 100% factual accuracy and original employer→bullet mapping."
+            "Receive STRUCTURED JSON with employer-separated positions. Generate optimized CV "
+            "maintaining 100% factual accuracy.\n\n"
+            "INPUT: JSON with positions array where each object = one employer\n"
+            "OUTPUT: Markdown CV where each position section uses ONLY content from its JSON object\n\n"
+            "YOU MUST:\n"
+            "1. Process each JSON position object independently\n"
+            "2. For each position, use ONLY the responsibilities from that object\n"
+            "3. Never pull content from a different position's object\n"
+            "4. Reorder bullets within each position by relevance\n"
+            "5. Adjust phrasing while keeping facts identical"
         ),
-        tools=[],
+        tools=[cv_read_tool, job_read_tool],
         verbose=True,
         backstory=(
-            "You are obsessive about not mixing employers. You treat the JSON as ground truth: "
-            "each position’s bullets must stay under that position."
+            "You are a CV editor who works with structured data. You receive clean JSON showing "
+            "exactly which bullets belong to which employer. You would never dream of moving a "
+            "bullet from position[0] to position[1]. You optimize presentation within strict "
+            "boundaries defined by the JSON structure."
         )
     )
-
+    
     cover_letter_writer = Agent(
         role="Adaptive Cover Letter Writer",
         goal=(
-            "Write a 250–400 word cover letter using the structured CV JSON. "
-            "Every specific achievement must be attributed to the correct employer as in the JSON."
+            "Write 250-400 word cover letters using STRUCTURED JSON CV data.\n\n"
+            "INPUT: JSON showing which achievements belong to which employer\n"
+            "PROCESS: Before mentioning any achievement, check the JSON to verify employer\n"
+            "OUTPUT: Letter where every achievement is correctly attributed\n\n"
+            "When you say 'At Company X, I did Y', verify in the JSON that Y appears "
+            "under Company X's position object."
         ),
-        tools=[],
+        tools=[cv_read_tool, job_read_tool],
         verbose=True,
         backstory=(
-            "You write persuasive, factually precise cover letters. You never say "
-            "'At Company X I did Y' unless the JSON shows Y under Company X."
+            "You write cover letters using structured CV data. You check the JSON to see which "
+            "employer each achievement belongs to before mentioning it. You understand that "
+            "saying 'At Company A, I did X' when X was actually done at Company B destroys "
+            "credibility instantly."
         )
     )
-
+    
+    # Quality Assurance
     quality_assurance_agent = Agent(
         role="Quality Assurance Specialist",
         goal=(
-            "Compare the revised CV and cover letter against the structured CV JSON. "
-            "Flag any misattribution or missing positions/bullets."
+            "Verify outputs against the STRUCTURED JSON CV data.\n\n"
+            "PRIMARY CHECK: For each achievement in the revised CV or cover letter, "
+            "verify it appears under the correct employer in the source JSON.\n\n"
+            "Use the JSON as ground truth. If revised CV shows Achievement X under Employer A, "
+            "but JSON shows it under Employer B, flag as CRITICAL ERROR."
         ),
-        tools=[],
+        tools=[cv_read_tool, job_read_tool],
         verbose=True,
         backstory=(
-            "You are the final gatekeeper. You cross-check everything against the JSON "
-            "and describe any discrepancies."
+            "You are a meticulous QA specialist with the source JSON as your reference. "
+            "You cross-check every claim against the structured data. You have zero tolerance "
+            "for misattribution and catch even subtle errors."
         )
     )
-
-    # Output file paths
-    temp_dir = tempfile.gettempdir()
-    cv_output_path = os.path.join(temp_dir, "revised_cv.md")
-    cl_output_path = os.path.join(temp_dir, "cover_letter.md")
-
-    # Tasks
-    job_analysis_task = Task(
+    
+    # Create Tasks with clear step separation
+    
+    # STEP 1 TASKS: Extraction
+    job_extraction_task = Task(
         description=(
-            "Job description:\n\n"
-            f"{job_description_text}\n\n"
-            "Extract and present:\n"
-            "1. Core responsibilities (bullet list)\n"
+            f"Analyze the job description at {job_desc_path}. "
+            "Extract and structure:\n"
+            "1. Core responsibilities (list format)\n"
             "2. Required technical skills\n"
             "3. Required soft skills\n"
             "4. Qualifications (education, experience level)\n"
+            "5. Company culture indicators\n"
+            "Provide structured output with clear categorization."
         ),
-        expected_output="Markdown with clearly labeled sections for responsibilities and requirements.",
+        expected_output="Structured output with categorized job requirements",
         agent=job_description_analyzer,
         async_execution=False
     )
-
+    
+    cv_extraction_task = Task(
+        description=(
+            f"Read the CV text from {cv_text_path}. Parse it into VALID JSON format.\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Read the COMPLETE CV text sequentially from start to finish\n"
+            "2. Identify section boundaries (Professional Experience, Education, Skills, etc.)\n"
+            "3. For each position in Professional Experience:\n"
+            "   - Find the employer/organization name\n"
+            "   - Find the position title\n"
+            "   - Find the date range\n"
+            "   - Collect ALL bullet points that follow BEFORE the next employer heading\n"
+            "4. Output ONLY valid JSON - no other text\n\n"
+            "JSON STRUCTURE (MUST MATCH EXACTLY):\n"
+            "```json\n"
+            "{\n"
+            '  "positions": [\n'
+            "    {\n"
+            '      "employer": "Company Name",\n'
+            '      "title": "Job Title",\n'
+            '      "dates": "Jan 2020 - Present",\n'
+            '      "location": "City, Country",\n'
+            '      "responsibilities": [\n'
+            '        "First bullet point",\n'
+            '        "Second bullet point"\n'
+            "      ]\n"
+            "    }\n"
+            "  ],\n"
+            '  "education": [\n'
+            "    {\n"
+            '      "degree": "Degree name",\n'
+            '      "institution": "University name",\n'
+            '      "year": "Year",\n'
+            '      "location": "City, Country"\n'
+            "    }\n"
+            "  ],\n"
+            '  "skills": {\n'
+            '    "technical": ["skill1", "skill2"],\n'
+            '    "soft": ["skill1", "skill2"]\n'
+            "  }\n"
+            "}\n"
+            "```\n\n"
+            "VALIDATION RULES:\n"
+            "- Each position object contains ONLY content from that specific employer\n"
+            "- Preserve ALL bullet points in their original order\n"
+            "- Use exact wording from CV\n"
+            "- Output must be parseable JSON (use proper escaping for quotes)\n"
+        ),
+        expected_output=(
+            "Valid JSON object containing:\n"
+            "- Complete list of positions with all details preserved\n"
+            "- Each position strictly separated by employer\n"
+            "- Education and skills sections\n"
+            "MUST be valid, parseable JSON"
+        ),
+        agent=cv_parser,
+        async_execution=False
+    )
+    
+    # STEP 2 TASK: Assessment
     fit_assessment_task = Task(
         description=(
-            "You are given:\n\n"
-            "JOB DESCRIPTION:\n"
-            f"{job_description_text}\n\n"
-            "STRUCTURED CV JSON:\n"
-            f"{cv_json}\n\n"
-            "Use ONLY this JSON for facts about the candidate. "
-            "Do not invent or move achievements between employers.\n\n"
-            "Calculate a fit score (0–100%), list strengths and gaps, and write a narrative.\n"
-            "Format:\n"
-            "## Fit Score: XX%\n"
-            "**Category:** HIGH/MEDIUM/LOW FIT\n\n"
-            "### Key Strengths:\n- ...\n\n"
-            "### Gaps and Areas for Growth:\n- ...\n\n"
-            "### Overall Assessment:\n...\n\n"
-            "### Recommendation:\n..."
+            "You will receive a JSON object from the CV Parser showing the candidate's structured CV data.\n\n"
+            "ANALYZE THE JSON:\n"
+            "- Review positions array (each object = one employer with their responsibilities)\n"
+            "- Review education and skills\n"
+            "- Compare against job requirements\n\n"
+            "Calculate fit score (0-100%) and provide detailed assessment.\n\n"
+            "FORMAT YOUR RESPONSE AS:\n"
+            "## Fit Score: [X]%\n"
+            "**Category:** [HIGH/MEDIUM/LOW] FIT\n\n"
+            "### Key Strengths:\n"
+            "- [List each strength with specific evidence]\n\n"
+            "### Gaps and Areas for Growth:\n"
+            "- [List each gap]\n\n"
+            "### Overall Assessment:\n"
+            "[2-3 paragraphs explaining score]\n\n"
+            "### Recommendation:\n"
+            "[Application strategy]"
         ),
-        expected_output="Fit score + category + strengths + gaps + narrative + recommendation.",
+        expected_output=(
+            "Comprehensive assessment with numerical score, category, strengths, gaps, "
+            "narrative assessment, and recommendation"
+        ),
         agent=recruitment_expert,
-        context=[job_analysis_task],
+        context=[job_extraction_task, cv_extraction_task],
         async_execution=False
     )
-
+    
+    # Get output directory
+    output_dir = tempfile.gettempdir()
+    cv_output = os.path.join(output_dir, 'revised_cv.md')
+    cl_output = os.path.join(output_dir, 'cover_letter.md')
+    
+    # STEP 3 TASKS: Adaptive Content Generation
     cv_revision_task = Task(
         description=(
-            "You are given STRUCTURED CV JSON:\n"
-            f"{cv_json}\n\n"
-            "This JSON has an array 'positions', where each element has:\n"
-            "  employer, title, dates, location, responsibilities[]\n\n"
+            "You will receive JSON from CV Parser with this structure:\n"
+            '{"positions": [{"employer": "...", "title": "...", "responsibilities": [...]}]}\n\n'
+            "CREATE OPTIMIZED CV:\n\n"
+            "STEP 1 - PARSE THE JSON:\n"
+            "- Load the JSON positions array\n"
+            "- Each array element = one employer with their responsibilities\n\n"
+            "STEP 2 - FOR EACH POSITION IN THE ARRAY:\n"
+            "- Extract: employer, title, dates, responsibilities\n"
+            "- Reorder responsibilities by relevance to job (within this position only)\n"
+            "- Adjust phrasing for impact (without changing facts)\n"
+            "- Write this position's section\n\n"
+            "STEP 3 - ASSEMBLE CV:\n"
+            "Format:\n"
+            "# [Name]\n"
+            "[Contact info]\n\n"
+            "## Professional Summary\n"
+            "[2-3 sentences]\n\n"
+            "## Professional Experience\n\n"
+            "### [Position Title]\n"
+            "**[Employer Name]** | [Location] | [Dates]\n"
+            "- [Reordered responsibility 1]\n"
+            "- [Reordered responsibility 2]\n"
+            "[ALL responsibilities from THIS position's JSON object]\n\n"
+            "[Repeat for each position in JSON array]\n\n"
+            "## Education\n"
+            "[From JSON]\n\n"
+            "## Skills\n"
+            "[From JSON]\n\n"
             "CRITICAL RULES:\n"
-            "- You MUST keep each responsibility under the same employer as in the JSON.\n"
-            "- You may reorder responsibilities WITHIN a position, but never move them to another.\n"
-            "- You may lightly rephrase bullets, but must not change their meaning.\n"
-            "- Do NOT drop positions or responsibilities.\n\n"
-            "Create a full CV in Markdown with sections:\n"
-            "1) [Your Name] + contact (placeholders OK)\n"
-            "2) Professional Summary (2–3 sentences)\n"
-            "3) Professional Experience (use positions array)\n"
-            "4) Education (summarized from JSON.education)\n"
-            "5) Skills (from JSON.skills)\n"
+            "- Process each JSON position object independently\n"
+            "- NEVER take a responsibility from positions[0] and put it under positions[1]\n"
+            "- Each CV section uses ONLY content from its corresponding JSON object\n\n"
+            "TONE: Adjust based on fit level (confident for high fit, balanced for medium/low)"
         ),
-        expected_output="Complete Markdown CV with correct employer→achievement mapping preserved.",
-        output_file=cv_output_path,
+        expected_output=(
+            "Complete CV in Markdown with:\n"
+            "- Each position containing ONLY content from its JSON object\n"
+            "- Strategic ordering within each position\n"
+            "- Enhanced phrasing\n"
+            "- ZERO cross-contamination between employers"
+        ),
+        output_file=cv_output,
         agent=cv_strategist,
-        context=[fit_assessment_task],
+        context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
         async_execution=True
     )
-
+    
     cover_letter_task = Task(
         description=(
-            "You are given:\n\n"
-            "JOB DESCRIPTION:\n"
-            f"{job_description_text}\n\n"
-            "STRUCTURED CV JSON:\n"
-            f"{cv_json}\n\n"
-            "FIT ASSESSMENT:\n"
-            "{fit_assessment}\n\n"
-            "First, read the JSON and build an internal map of achievements -> employer.\n"
-            "When you mention a specific achievement, you MUST check which employer it "
-            "belongs to in the JSON and attribute it correctly.\n\n"
-            "Write a 250–400 word cover letter with:\n"
-            "- Intro paragraph (interest + short background)\n"
-            "- 1–2 body paragraphs highlighting specific achievements with correct employers\n"
-            "- Connection to the job and organization\n"
-            "- Closing with enthusiasm and invitation to talk\n"
+            "You will receive JSON from CV Parser showing which achievements belong to which employer.\n\n"
+            "WRITE 250-400 WORD COVER LETTER:\n\n"
+            "STEP 1 - REVIEW JSON STRUCTURE:\n"
+            "The CV JSON has positions array like:\n"
+            '[{"employer": "Company A", "responsibilities": [...]}, {"employer": "Company B", ...}]\n\n'
+            "STEP 2 - SELECT ACHIEVEMENTS TO HIGHLIGHT:\n"
+            "Choose 1-2 most relevant achievements for the letter.\n"
+            "For each, note: which position index it's in → which employer that is\n\n"
+            "STEP 3 - WRITE WITH VERIFIED ATTRIBUTION:\n"
+            "When mentioning an achievement, use this pattern:\n"
+            '"In my role as [title from that JSON object] at [employer from that JSON object], I [achievement]"\n\n'
+            "WRONG (causes misattribution):\n"
+            "- Taking achievement from positions[0] and saying it was at positions[1].employer\n"
+            "- Mentioning your current role but describing achievement from previous role\n\n"
+            "CORRECT:\n"
+            "- Check JSON: positions[2] has employer='Acme Corp' and responsibility='Led $5M project'\n"
+            "- Write: 'In my role as Senior Manager at Acme Corp, I led a $5M project...'\n\n"
+            "STRUCTURE:\n"
+            "Paragraph 1: Interest + brief background (general, no specific achievements)\n"
+            "Paragraph 2: Highlight 1-2 achievements with CORRECT employer attribution\n"
+            "Paragraph 3: Connect to company mission and role requirements\n"
+            "Paragraph 4: Enthusiasm and call to action\n\n"
+            "TONE: Match fit level (confident for high, balanced for medium, humble for low)\n\n"
+            "FORMAT: Standard business letter with [placeholders] for personalization"
         ),
-        expected_output="A 250–400 word factually correct cover letter in Markdown.",
-        output_file=cl_output_path,
+        expected_output=(
+            "250-400 word cover letter with:\n"
+            "- Correct employer attribution for any specific achievements\n"
+            "- Professional business format\n"
+            "- Appropriate tone for fit level"
+        ),
+        output_file=cl_output,
         agent=cover_letter_writer,
-        context=[fit_assessment_task],
+        context=[job_extraction_task, cv_extraction_task, fit_assessment_task],
         async_execution=True
     )
-
+    
     qa_task = Task(
         description=(
-            "Use the STRUCTURED CV JSON as ground truth:\n"
-            f"{cv_json}\n\n"
-            "You will review:\n"
-            "1) The revised CV (Markdown):\n"
-            "{revised_cv}\n\n"
-            "2) The cover letter (Markdown):\n"
-            "{cover_letter}\n\n"
-            "Check:\n"
-            "- Are all positions present compared to JSON.positions?\n"
-            "- Are all responsibilities present somewhere under the same employer?\n"
-            "- Are there any achievements attributed to the wrong employer?\n"
-            "- Did the cover letter correctly attribute each specific achievement?\n\n"
-            "Return a QA report with:\n"
-            "Approval Status: Approved / Approved with Revisions / Major Errors Found\n\n"
-            "Then list specific issues if any."
+            "VERIFY OUTPUTS AGAINST SOURCE JSON:\n\n"
+            "You have access to the structured JSON showing which responsibilities belong to which employer.\n\n"
+            "VERIFICATION PROCESS:\n\n"
+            "STEP 1 - LOAD JSON AS REFERENCE:\n"
+            "Parse the CV JSON to understand the ground truth employer-responsibility mapping.\n\n"
+            "STEP 2 - CHECK REVISED CV:\n"
+            "For each position section in the revised CV:\n"
+            "- Identify the employer name\n"
+            "- List all achievements/responsibilities mentioned\n"
+            "- Cross-reference with JSON: are these from the correct position object?\n"
+            "- Flag any achievement that appears under wrong employer\n\n"
+            "STEP 3 - CHECK COVER LETTER:\n"
+            "For each specific achievement mentioned:\n"
+            "- Extract the claimed employer ('At Company X, I did Y')\n"
+            "- Verify in JSON that Y actually appears under Company X\n"
+            "- Flag any misattribution\n\n"
+            "STEP 4 - OVERALL QUALITY:\n"
+            "- Tone appropriate for fit level?\n"
+            "- Grammar and professionalism?\n"
+            "- Completeness?\n\n"
+            "OUTPUT FORMAT:\n"
+            "Approval Status: [Approved / Approved with Revisions / Major Errors Found]\n\n"
+            "1. CV Accuracy Check:\n"
+            "   ✓ All achievements correctly attributed\n"
+            "   OR\n"
+            "   ✗ Found misattributions: [list specific errors]\n\n"
+            "2. Cover Letter Accuracy Check:\n"
+            "   [Similar format]\n\n"
+            "3. Quality Assessment:\n"
+            "   [Tone, grammar, persuasiveness]\n\n"
+            "4. Revision Notes:\n"
+            "   [If needed, specific corrections required]"
         ),
-        expected_output="QA report describing any misattribution or missing content.",
+        expected_output=(
+            "QA report with approval status and verification that all content is "
+            "accurately attributed using JSON as ground truth"
+        ),
         agent=quality_assurance_agent,
-        context=[cv_revision_task, cover_letter_task],
+        context=[cv_revision_task, cover_letter_task, fit_assessment_task, cv_extraction_task],
         async_execution=False
     )
-
+    
+    # Create and return crew
     crew = Crew(
         agents=[
             job_description_analyzer,
+            cv_parser,
             recruitment_expert,
             cv_strategist,
             cover_letter_writer,
             quality_assurance_agent
         ],
         tasks=[
-            job_analysis_task,
+            job_extraction_task,
+            cv_extraction_task,
             fit_assessment_task,
             cv_revision_task,
             cover_letter_task,
@@ -502,225 +569,333 @@ def create_agents_and_tasks(cv_structured: Dict, job_description_text: str):
         ],
         verbose=True
     )
+    
+    return crew
 
-    handles = {
-        "fit": fit_assessment_task,
-        "cv": cv_revision_task,
-        "cl": cover_letter_task,
-        "qa": qa_task,
-        "jd": job_analysis_task
+def validate_outputs(revised_cv: str, cover_letter: str, cv_extraction: str) -> dict:
+    """
+    Validate CV and cover letter for potential misattribution errors.
+    Uses general heuristics applicable to any CV.
+    Returns dict with warnings if issues found.
+    """
+    warnings = {
+        'cv_warnings': [],
+        'cover_letter_warnings': []
     }
+    
+    if not cv_extraction:
+        return warnings
+    
+    # Generic approach: Look for quantified achievements (numbers, $, %) 
+    # and check if they might be under unexpected employers
+    
+    import re
+    
+    # Extract all employer/organization names from CV extraction
+    employer_pattern = r'(?:Organization|Employer|Company):\s*([^\n]+)'
+    employers = re.findall(employer_pattern, cv_extraction, re.IGNORECASE)
+    
+    # Look for quantified achievements in revised CV
+    # Pattern: dollar amounts, percentages, large numbers with M/K/B
+    achievement_patterns = [
+        r'\$[\d,]+\s*(?:million|M|billion|B|thousand|K)',
+        r'\d+(?:,\d{3})*\s*(?:million|M|billion|B|thousand|K)',
+        r'\d+%',
+        r'\d+\+?\s*(?:people|users|customers|clients|employees|team members)'
+    ]
+    
+    # Check if major quantified achievements appear in unexpected places
+    cv_sections = revised_cv.split('###')
+    for section in cv_sections:
+        lines = section.split('\n')
+        section_header = lines[0] if lines else ''
+        
+        # Look for achievements in this section
+        for pattern in achievement_patterns:
+            matches = re.findall(pattern, section, re.IGNORECASE)
+            if matches and len(matches) >= 2:
+                # Multiple significant achievements in one section
+                # This might indicate consolidation from multiple roles
+                if len(section.split('-')) > 8:  # More than 8 bullet points
+                    warnings['cv_warnings'].append(
+                        f"⚠️ Section contains many achievements. Please verify all items "
+                        f"belong to the employer listed in this section."
+                    )
+                    break
+    
+    # Check cover letter for specific achievement claims
+    # Look for patterns like "At [Company], I [quantified achievement]"
+    cl_lines = cover_letter.split('.')
+    for line in cl_lines:
+        # Check if line contains both a company reference and quantified achievement
+        has_company_ref = any(word in line.lower() for word in ['at ', 'with ', 'for '])
+        has_quantified = any(re.search(pattern, line, re.IGNORECASE) for pattern in achievement_patterns)
+        
+        if has_company_ref and has_quantified:
+            warnings['cover_letter_warnings'].append(
+                f"⚠️ Achievement with specific numbers mentioned. Please verify it's "
+                f"attributed to the correct employer from your original CV."
+            )
+            break
+    
+    # General reminder if any quantified claims exist
+    if re.search(r'\$[\d,]+|[\d,]+\s*(?:million|M)', cover_letter):
+        if not warnings['cover_letter_warnings']:
+            warnings['cover_letter_warnings'].append(
+                "💡 Tip: Double-check that any specific achievements or numbers mentioned "
+                "are attributed to the correct employer."
+            )
+    
+    return warnings
 
-    return crew, handles, {
-        "cv_output_path": cv_output_path,
-        "cl_output_path": cl_output_path
-    }
+def extract_fit_score(assessment_text: str) -> Tuple[int, str]:
+    """Extract fit score and category from assessment text"""
+    # Look for percentage patterns
+    import re
+    score_match = re.search(r'(\d+)%', assessment_text)
+    score = int(score_match.group(1)) if score_match else 50
+    
+    # Determine category
+    if score >= 75:
+        category = "HIGH"
+    elif score >= 50:
+        category = "MEDIUM"
+    else:
+        category = "LOW"
+    
+    return score, category
 
-# ---------------------------------------------------------
-# MAIN APP
-# ---------------------------------------------------------
 def main():
-    st.markdown('<div class="main-header">💼 AI-Powered Job Application Assistant</div>',
+    st.markdown('<div class="main-header">💼 AI-Powered Job Application Assistant</div>', 
                 unsafe_allow_html=True)
     st.markdown("""
-    This tool uses a multi-agent AI system to:
-    - Analyze the job description
-    - Evaluate your fit
-    - Generate a tailored CV (without mixing experiences between employers)
-    - Draft a factually accurate cover letter
-    - Run a QA check against your original CV
+    This tool uses a multi-agent AI system with retrieval-augmented generation to:
+    - Extract and analyze job requirements using embeddings
+    - Assess candidate fit quantitatively and qualitatively
+    - Generate adaptive, honest application materials based on fit level
     """)
-
+    
+    # API Setup
     if not setup_openai_api():
         st.stop()
+    
     st.success("✅ API configured successfully")
-
-    # Inputs
-    st.markdown('<div class="section-header">📄 Upload Your Documents</div>',
+    
+    # Main input section
+    st.markdown('<div class="section-header">📄 Upload Your Documents</div>', 
                 unsafe_allow_html=True)
+    
     col1, col2 = st.columns(2)
-
+    
     with col1:
         st.subheader("Your Resume/CV")
         resume_file = st.file_uploader(
-            "Upload your CV (PDF, Word, or text)",
-            type=["pdf", "docx", "doc", "txt", "md"],
-            help="Upload your current resume"
+            "Upload your CV",
+            type=['docx', 'doc', 'txt', 'md'],
+            help="Upload your CV in Word document (.docx, .doc) or text format (.txt, .md)"
         )
-
+    
     with col2:
         st.subheader("Job Description")
         job_input_method = st.radio(
             "How would you like to provide the job description?",
             ["Paste Text", "Upload File"]
         )
-        job_description_text = ""
-        job_file = None
-
+        
         if job_input_method == "Paste Text":
-            job_description_text = st.text_area(
+            job_description = st.text_area(
                 "Paste job description here",
                 height=300,
                 help="Copy and paste the full job posting"
             )
         else:
             job_file = st.file_uploader(
-                "Upload job description file",
-                type=["txt", "md", "pdf", "docx", "doc"],
-                help="Upload job description"
+                "Upload job description",
+                type=['txt', 'md', 'docx', 'doc'],
+                help="Upload job description in Word document or text format"
             )
-
-    # Process
+    
+    # Process button
     if st.button("🚀 Analyze and Generate Application Materials", type="primary"):
         if not resume_file:
             st.error("❌ Please upload your resume")
             return
-
-        if job_input_method == "Paste Text" and not job_description_text.strip():
+        
+        if job_input_method == "Paste Text" and not job_description:
             st.error("❌ Please provide a job description")
             return
-        if job_input_method == "Upload File" and job_file is None:
+        elif job_input_method == "Upload File" and not job_file:
             st.error("❌ Please upload a job description file")
             return
-
+        
         with st.spinner("🔄 Processing your application... This may take a few minutes."):
             try:
-                # --- CV text extraction ---
+                # Extract text from CV (supports multiple formats)
                 status_text = st.empty()
                 status_text.text("Extracting text from your CV...")
-
+                
+                # Save file temporarily first
                 resume_path = save_uploaded_file(resume_file)
-                cv_ext = resume_file.name.split(".")[-1].lower()
-                cv_text = extract_text_from_file(resume_path, cv_ext)
-
-                if not cv_text or len(cv_text.strip()) < 50:
-                    st.error("❌ Failed to extract meaningful text from the CV. "
-                             "Please check the file or try another format.")
+                
+                # Determine file type
+                file_extension = resume_file.name.split('.')[-1].lower()
+                
+                # Extract text based on file type
+                resume_text = extract_text_from_file(resume_path, file_extension)
+                
+                if not resume_text or len(resume_text.strip()) < 50:
+                    st.error(f"❌ Failed to extract meaningful text from {file_extension.upper()}. The file may be empty or corrupted. Please try a different file.")
                     return
-
+                
+                # Display preview of extracted text for debugging
                 with st.expander("📄 Preview extracted CV text (first 500 characters)"):
-                    st.text(cv_text[:500] + "..." if len(cv_text) > 500 else cv_text)
-
-                # --- Deterministic parsing into structured JSON ---
-                status_text.text("Parsing CV into structured JSON (no LLM)...")
-                cv_structured = parse_cv_text_to_structured_json(cv_text)
-
-                with st.expander("🔎 Structured CV JSON (debug)"):
-                    st.json(cv_structured)
-
-                # --- Job description text extraction ---
+                    st.text(resume_text[:500] + "..." if len(resume_text) > 500 else resume_text)
+                
+                # Save extracted text as a file
+                cv_text_path = save_text_as_file(resume_text, "cv_text.txt")
+                
+                # Save job description
                 if job_input_method == "Paste Text":
-                    jd_text = job_description_text.strip()
+                    if not job_description or len(job_description.strip()) < 50:
+                        st.error("❌ Job description is too short. Please provide a complete job description.")
+                        return
+                    job_desc_path = save_text_as_markdown(job_description, "job_description.md")
                 else:
-                    jd_path = save_uploaded_file(job_file)
-                    jd_ext = job_file.name.split(".")[-1].lower()
-                    jd_text = extract_text_from_file(jd_path, jd_ext)
-                    jd_text = jd_text.strip()
-
-                if not jd_text or len(jd_text) < 50:
-                    st.error("❌ Job description seems too short or empty. "
-                             "Please provide a full job posting.")
-                    return
-
+                    job_desc_path = save_uploaded_file(job_file)
+                    # Convert job file to text if needed (Word documents)
+                    if job_file.name.endswith(('.docx', '.doc')):
+                        job_extension = job_file.name.split('.')[-1].lower()
+                        job_text = extract_text_from_file(job_desc_path, job_extension)
+                        if job_text:
+                            job_desc_path = save_text_as_file(job_text, "job_description.txt")
+                
+                # Display job description preview
                 with st.expander("📋 Preview job description (first 300 characters)"):
-                    st.text(jd_text[:300] + "..." if len(jd_text) > 300 else jd_text)
-
-                # --- Create crew & run ---
-                from datetime import datetime
-
+                    try:
+                        with open(job_desc_path, 'r', encoding='utf-8') as f:
+                            job_preview = f.read()
+                            st.text(job_preview[:300] + "..." if len(job_preview) > 300 else job_preview)
+                    except:
+                        st.text("Could not load preview")
+                
+                # Create progress indicators
                 progress_bar = st.progress(0)
-                progress_bar.progress(20)
-                status_text.text("Step 1/3: Running analysis and fit assessment...")
-
-                crew, handles, paths = create_agents_and_tasks(cv_structured, jd_text)
-
-                # kickoff without extra inputs (all in task descriptions)
-                result = crew.kickoff()
-
-                progress_bar.progress(70)
-                status_text.text("Step 2/3: Generating CV and cover letter...")
-
-                # Read outputs
-                revised_cv = ""
-                cover_letter = ""
-                qa_report = ""
-                assessment = ""
-
-                # Fit assessment
-                if handles["fit"].output is not None:
-                    assessment = str(handles["fit"].output)
-                else:
-                    assessment = str(result)
-
-                # CV
-                if os.path.exists(paths["cv_output_path"]):
-                    with open(paths["cv_output_path"], "r", encoding="utf-8") as f:
-                        revised_cv = f.read()
-                elif handles["cv"].output is not None:
-                    revised_cv = str(handles["cv"].output)
-
-                # Cover letter
-                if os.path.exists(paths["cl_output_path"]):
-                    with open(paths["cl_output_path"], "r", encoding="utf-8") as f:
-                        cover_letter = f.read()
-                elif handles["cl"].output is not None:
-                    cover_letter = str(handles["cl"].output)
-
-                # QA report
-                if handles["qa"].output is not None:
-                    qa_report = str(handles["qa"].output)
-                else:
-                    qa_report = str(result)
-
+                
+                status_text.text("Step 1/3: Parsing CV into structured format...")
+                progress_bar.progress(33)
+                
+                # Create and run crew
+                crew = create_agents_and_tasks(cv_text_path, job_desc_path)
+                
+                status_text.text("Step 2/3: Assessing candidate fit...")
+                progress_bar.progress(66)
+                
+                inputs = {
+                    'job_posting': job_desc_path,
+                    'cv_text': cv_text_path
+                }
+                
+                # Execute the crew
+                try:
+                    result = crew.kickoff(inputs=inputs)
+                except Exception as crew_error:
+                    st.error(f"❌ Error during AI processing: {str(crew_error)}")
+                    with st.expander("🔍 Detailed Error Information"):
+                        st.code(str(crew_error))
+                    return
+                
+                status_text.text("Step 3/3: Generating application materials...")
                 progress_bar.progress(100)
-                status_text.text("Step 3/3: Finalizing outputs...")
-
+                
+                # Read generated files - try multiple possible locations
+                temp_dir = tempfile.gettempdir()
+                possible_locations = [
+                    temp_dir,
+                    os.getcwd(),
+                    '/mount/src/llm_final_project',
+                    '.'
+                ]
+                
+                revised_cv = None
+                cover_letter = None
+                
+                # Try to find the files
+                for location in possible_locations:
+                    cv_path = os.path.join(location, 'revised_cv.md')
+                    cl_path = os.path.join(location, 'cover_letter.md')
+                    
+                    if os.path.exists(cv_path) and os.path.exists(cl_path):
+                        with open(cv_path, 'r', encoding='utf-8') as f:
+                            revised_cv = f.read()
+                        with open(cl_path, 'r', encoding='utf-8') as f:
+                            cover_letter = f.read()
+                        break
+                
+                # If files not found, extract from crew result
+                if not revised_cv or not cover_letter:
+                    st.warning("⚠️ Output files not found in expected locations. Extracting from agent outputs...")
+                    result_str = str(result)
+                    
+                    # For now, use the full result as a placeholder
+                    revised_cv = "# Revised CV\n\n" + result_str
+                    cover_letter = "# Cover Letter\n\n" + result_str
+                
+                # Extract individual task outputs
+                task_outputs = {}
+                for task in crew.tasks:
+                    if hasattr(task, 'output') and task.output:
+                        task_outputs[task.agent.role] = str(task.output)
+                
+                # Get the fit assessment specifically
+                fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
+                cv_extraction_output = task_outputs.get('CV Parser and Analyzer', '')
+                
+                # Validate outputs for misattributions (now that revised_cv and cover_letter are defined)
+                validation_warnings = validate_outputs(revised_cv, cover_letter, cv_extraction_output)
+                
+                # Store results with timestamp
+                from datetime import datetime
                 st.session_state.results = {
-                    "assessment": assessment,
-                    "revised_cv": revised_cv,
-                    "cover_letter": cover_letter,
-                    "qa_report": qa_report,
-                    "cv_structured": cv_structured
+                    'assessment': fit_assessment_output,
+                    'revised_cv': revised_cv,
+                    'cover_letter': cover_letter,
+                    'qa_report': str(result),  # Store QA separately
+                    'all_outputs': task_outputs,
+                    'validation_warnings': validation_warnings
                 }
                 st.session_state.generation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 st.session_state.processing_complete = True
-
+                
                 status_text.text("✅ Processing complete!")
                 progress_bar.empty()
-
+                status_text.empty()
+                
             except Exception as e:
                 st.error(f"❌ An error occurred: {str(e)}")
                 import traceback
-                with st.expander("🔍 Error details"):
+                with st.expander("🔍 Error Details (for debugging)"):
                     st.code(traceback.format_exc())
                 return
-
-    # -----------------------------------------------------
-    # Display Results
-    # -----------------------------------------------------
+    
+    # Display results
     if st.session_state.processing_complete and st.session_state.results:
         st.markdown("---")
         st.markdown('<div class="section-header">📊 Results</div>', unsafe_allow_html=True)
-
-        assessment = st.session_state.results["assessment"]
-        revised_cv = st.session_state.results["revised_cv"]
-        cover_letter = st.session_state.results["cover_letter"]
-        qa_report = st.session_state.results["qa_report"]
-
+        
+        # Extract fit score
+        assessment = st.session_state.results['assessment']
         fit_score, fit_category = extract_fit_score(assessment)
-        fit_class = (
-            "high-fit" if fit_category == "HIGH"
-            else "medium-fit" if fit_category == "MEDIUM"
-            else "low-fit"
-        )
-
-        st.markdown(f"""
+        
+        # Display fit score with color coding
+        fit_class = "high-fit" if fit_category == "HIGH" else "medium-fit" if fit_category == "MEDIUM" else "low-fit"
+        st.markdown(f'''
             <div class="fit-score {fit_class}">
                 Fit Score: {fit_score}%<br>
                 <span style="font-size: 1.5rem;">{fit_category} FIT</span>
             </div>
-        """, unsafe_allow_html=True)
-
+        ''', unsafe_allow_html=True)
+        
+        # Tabs for different outputs
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📋 Fit Assessment",
             "📄 Revised CV",
@@ -728,67 +903,68 @@ def main():
             "✅ QA Report",
             "💾 Download All"
         ])
-
+        
         with tab1:
             st.markdown("### Detailed Fit Assessment")
             st.markdown(assessment)
-
+            
+            # Show breakdown if available
+            if 'all_outputs' in st.session_state.results:
+                with st.expander("📊 View Detailed Analysis"):
+                    job_analysis = st.session_state.results['all_outputs'].get('Job Description Analyzer', 'N/A')
+                    cv_analysis = st.session_state.results['all_outputs'].get('CV Parser and Analyzer', 'N/A')
+                    
+                    st.markdown("#### Job Requirements Extracted:")
+                    st.markdown(job_analysis)
+                    
+                    st.markdown("---")
+                    
+                    st.markdown("#### Candidate Profile Summary:")
+                    st.info("💡 **Use this to verify accuracy:** Check that all achievements in your revised CV and cover letter match the organizations listed here.")
+                    st.markdown(cv_analysis)
+        
         with tab2:
             st.markdown("### Your Tailored CV")
-            st.info(
-                "⚠️ **Important:** Review carefully to ensure all information is accurate. "
-                "This version should preserve employer boundaries and bullets, but "
-                "you are the final judge of correctness."
+            
+            # Show validation warnings if any
+            if st.session_state.results.get('validation_warnings', {}).get('cv_warnings'):
+                for warning in st.session_state.results['validation_warnings']['cv_warnings']:
+                    st.warning(warning)
+            
+            st.info("⚠️ **Important:** Always review the CV carefully to ensure all information is accurate and no experiences were misattributed between employers.")
+            st.markdown(st.session_state.results['revised_cv'])
+            st.download_button(
+                label="⬇️ Download CV",
+                data=st.session_state.results['revised_cv'],
+                file_name="revised_cv.md",
+                mime="text/markdown"
             )
-            st.markdown(revised_cv if revised_cv else "_No CV output found._")
-
-            if revised_cv:
-                st.download_button(
-                    label="⬇️ Download CV (Markdown)",
-                    data=revised_cv,
-                    file_name="revised_cv.md",
-                    mime="text/markdown"
-                )
-                cv_docx_path = markdown_to_docx(revised_cv, "revised_cv.docx")
-                with open(cv_docx_path, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Download CV (Word)",
-                        data=f,
-                        file_name="revised_cv.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-
+        
         with tab3:
             st.markdown("### Your Cover Letter")
-            st.info(
-                "⚠️ **Important:** Verify that all specific achievements and numbers "
-                "are attributed to the correct employer. Personalize placeholders like "
-                "[Your Name] and [Hiring Manager's Name]."
+            
+            # Show validation warnings if any
+            if st.session_state.results.get('validation_warnings', {}).get('cover_letter_warnings'):
+                for warning in st.session_state.results['validation_warnings']['cover_letter_warnings']:
+                    st.warning(warning)
+            
+            st.info("⚠️ **Important:** Verify that all achievements mentioned are attributed to the correct employer. Personalize placeholders like [Your Name] and [Hiring Manager's Name].")
+            st.markdown(st.session_state.results['cover_letter'])
+            st.download_button(
+                label="⬇️ Download Cover Letter",
+                data=st.session_state.results['cover_letter'],
+                file_name="cover_letter.md",
+                mime="text/markdown"
             )
-            st.markdown(cover_letter if cover_letter else "_No cover letter output found._")
-
-            if cover_letter:
-                st.download_button(
-                    label="⬇️ Download Cover Letter (Markdown)",
-                    data=cover_letter,
-                    file_name="cover_letter.md",
-                    mime="text/markdown"
-                )
-                cl_docx_path = markdown_to_docx(cover_letter, "cover_letter.docx")
-                with open(cl_docx_path, "rb") as f:
-                    st.download_button(
-                        label="⬇️ Download Cover Letter (Word)",
-                        data=f,
-                        file_name="cover_letter.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    )
-
+        
         with tab4:
             st.markdown("### Quality Assurance Report")
-            st.markdown(qa_report if qa_report else "_No QA report available._")
-
+            st.markdown(st.session_state.results.get('qa_report', 'No QA report available'))
+        
         with tab5:
             st.markdown("### Download All Documents")
+            
+            # Create combined document with proper assessment
             combined = f"""# Job Application Package - Generated by AI Assistant
 
 ## Fit Assessment
@@ -797,59 +973,61 @@ def main():
 ---
 
 ## Quality Assurance Report
-{qa_report}
+{st.session_state.results.get('qa_report', 'No QA report available')}
 
 ---
 
 ## Revised CV
-{revised_cv}
+{st.session_state.results['revised_cv']}
 
 ---
 
 ## Cover Letter
-{cover_letter}
+{st.session_state.results['cover_letter']}
 
 ---
 
 *Generated on {st.session_state.get('generation_date', 'N/A')}*
 """
+            
             st.download_button(
-                label="⬇️ Download Complete Package (Markdown)",
+                label="⬇️ Download Complete Package",
                 data=combined,
                 file_name="job_application_package.md",
                 mime="text/markdown"
             )
-
-    # Sidebar
+    
+    # Sidebar information
     with st.sidebar:
         st.markdown("### 📖 How It Works")
         st.markdown("""
-        **Step 1: CV Parsing (Deterministic)**
-        - PDF/Word parsed into a structured JSON (no LLM).
-        - Employer–bullet relationships are preserved.
-
-        **Step 2: Multi-Agent Pipeline (crewAI)**
-        - Job description analysis
-        - Fit assessment
-        - CV rewriting (strict employer boundaries)
-        - Cover letter drafting
-
-        **Step 3: QA**
-        - QA agent checks outputs against the structured CV JSON.
+        **Step 1: Information Extraction**
+        - Semantic parsing of job description
+        - CV analysis using embeddings
+        
+        **Step 2: Fit Assessment**
+        - Quantitative scoring (0-100%)
+        - Strength/gap identification
+        - Category assignment
+        
+        **Step 3: Adaptive Generation**
+        - High Fit (75%+): Confident materials
+        - Medium Fit (50-74%): Balanced approach
+        - Low Fit (<50%): Honest, growth-focused
         """)
-
+        
         st.markdown("---")
         st.markdown("### 🔒 Privacy")
         st.info("Your documents are processed temporarily and not stored permanently.")
-
+        
         st.markdown("---")
         st.markdown("### 💡 Tips")
         st.markdown("""
-        - Use a reasonably structured CV (clear EXPERIENCE/EDUCATION headings).
-        - Provide the full job description.
-        - Always review the generated CV and cover letter before sending.
+        - Use a well-formatted PDF resume
+        - Include complete job descriptions
+        - Review generated materials before sending
+        - Adjust based on your authentic voice
         """)
-
 
 if __name__ == "__main__":
     main()
