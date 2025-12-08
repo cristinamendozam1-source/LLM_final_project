@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import os
 import tempfile
 from pathlib import Path
@@ -85,10 +85,12 @@ def setup_openai_api():
                 st.warning("⚠️ Please enter your OpenAI API key to continue")
                 return False
 
-def save_uploaded_file(uploaded_file, suffix='.pdf'):
+# 🔹 CHANGED: no suffix arg, preserve original extension
+def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary directory and return path"""
     temp_dir = tempfile.gettempdir()
-    temp_path = os.path.join(temp_dir, f"temp_{uploaded_file.name}")
+    name = Path(uploaded_file.name)
+    temp_path = os.path.join(temp_dir, f"temp_{name.stem}{name.suffix}")
     with open(temp_path, 'wb') as f:
         f.write(uploaded_file.getbuffer())
     return temp_path
@@ -265,8 +267,6 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     )
     
     # Create Tasks with clear step separation
-    
-    # STEP 1 TASKS: Extraction
     job_extraction_task = Task(
         description=(
             f"Analyze the job description at {job_desc_path}. "
@@ -320,7 +320,6 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         async_execution=False
     )
     
-    # STEP 2 TASK: Assessment
     fit_assessment_task = Task(
         description=(
             "Based on extracted job requirements and CV information:\n"
@@ -356,12 +355,10 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         async_execution=False
     )
     
-    # Get output directory
     output_dir = tempfile.gettempdir()
     cv_output = os.path.join(output_dir, 'revised_cv.md')
     cl_output = os.path.join(output_dir, 'cover_letter.md')
     
-    # STEP 3 TASKS: Adaptive Content Generation
     cv_revision_task = Task(
         description=(
             "Create an optimized CV that maintains complete factual accuracy.\n\n"
@@ -542,7 +539,6 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
         async_execution=False
     )
     
-    # Create and return crew
     crew = Crew(
         agents=[
             job_description_analyzer,
@@ -567,12 +563,10 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
 
 def extract_fit_score(assessment_text: str) -> Tuple[int, str]:
     """Extract fit score and category from assessment text"""
-    # Look for percentage patterns
     import re
     score_match = re.search(r'(\d+)%', assessment_text)
     score = int(score_match.group(1)) if score_match else 50
     
-    # Determine category
     if score >= 75:
         category = "HIGH"
     elif score >= 50:
@@ -592,13 +586,11 @@ def main():
     - Generate adaptive, honest application materials based on fit level
     """)
     
-    # API Setup
     if not setup_openai_api():
         st.stop()
     
     st.success("✅ API configured successfully")
     
-    # Main input section
     st.markdown('<div class="section-header">📄 Upload Your Documents</div>', 
                 unsafe_allow_html=True)
     
@@ -606,10 +598,11 @@ def main():
     
     with col1:
         st.subheader("Your Resume/CV")
+        # 🔹 CHANGED: only Word or text
         resume_file = st.file_uploader(
-            "Upload your CV (PDF format)",
-            type=['pdf'],
-            help="Upload your current resume in PDF format"
+            "Upload your CV (Word or text format)",
+            type=['docx', 'txt'],
+            help="Upload your current resume in .docx or .txt format"
         )
     
     with col2:
@@ -626,13 +619,13 @@ def main():
                 help="Copy and paste the full job posting"
             )
         else:
+            # 🔹 CHANGED: only text/markdown/Word, no PDF
             job_file = st.file_uploader(
                 "Upload job description",
-                type=['txt', 'md', 'pdf'],
-                help="Upload job description in text, markdown, or PDF format"
+                type=['txt', 'md', 'docx'],
+                help="Upload job description in text, markdown, or Word (.docx) format"
             )
     
-    # Process button
     if st.button("🚀 Analyze and Generate Application Materials", type="primary"):
         if not resume_file:
             st.error("❌ Please upload your resume")
@@ -647,23 +640,21 @@ def main():
         
         with st.spinner("🔄 Processing your application... This may take a few minutes."):
             try:
-                # Save resume
+                # Save resume (keeps original extension)
                 resume_path = save_uploaded_file(resume_file)
                 
                 # Save job description
                 if job_input_method == "Paste Text":
                     job_desc_path = save_text_as_markdown(job_description, "job_description.md")
                 else:
-                    job_desc_path = save_uploaded_file(job_file, suffix='.md')
+                    job_desc_path = save_uploaded_file(job_file)
                 
-                # Create progress indicators
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
                 status_text.text("Step 1/3: Extracting information from documents...")
                 progress_bar.progress(33)
                 
-                # Create and run crew
                 crew = create_agents_and_tasks(resume_path, job_desc_path)
                 
                 status_text.text("Step 2/3: Assessing candidate fit...")
@@ -679,16 +670,13 @@ def main():
                 status_text.text("Step 3/3: Generating application materials...")
                 progress_bar.progress(100)
                 
-                # Extract individual task outputs
                 task_outputs = {}
                 for task in crew.tasks:
                     if hasattr(task, 'output') and task.output:
                         task_outputs[task.agent.role] = str(task.output)
                 
-                # Get the fit assessment specifically
                 fit_assessment_output = task_outputs.get('Recruitment Assessment Expert', str(result))
                 
-                # Read generated files - try multiple possible locations
                 temp_dir = tempfile.gettempdir()
                 possible_locations = [
                     temp_dir,
@@ -700,7 +688,6 @@ def main():
                 revised_cv = None
                 cover_letter = None
                 
-                # Try to find the files
                 for location in possible_locations:
                     cv_path = os.path.join(location, 'revised_cv.md')
                     cl_path = os.path.join(location, 'cover_letter.md')
@@ -712,22 +699,18 @@ def main():
                             cover_letter = f.read()
                         break
                 
-                # If files not found, extract from crew result
                 if not revised_cv or not cover_letter:
                     st.warning("⚠️ Output files not found in expected locations. Extracting from agent outputs...")
                     result_str = str(result)
-                    
-                    # For now, use the full result as a placeholder
                     revised_cv = "# Revised CV\n\n" + result_str
                     cover_letter = "# Cover Letter\n\n" + result_str
                 
-                # Store results with timestamp
                 from datetime import datetime
                 st.session_state.results = {
                     'assessment': fit_assessment_output,
                     'revised_cv': revised_cv,
                     'cover_letter': cover_letter,
-                    'qa_report': str(result),  # Store QA separately
+                    'qa_report': str(result),
                     'all_outputs': task_outputs
                 }
                 st.session_state.generation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -741,16 +724,13 @@ def main():
                 st.exception(e)
                 return
     
-    # Display results
     if st.session_state.processing_complete and st.session_state.results:
         st.markdown("---")
         st.markdown('<div class="section-header">📊 Results</div>', unsafe_allow_html=True)
         
-        # Extract fit score
         assessment = st.session_state.results['assessment']
         fit_score, fit_category = extract_fit_score(assessment)
         
-        # Display fit score with color coding
         fit_class = "high-fit" if fit_category == "HIGH" else "medium-fit" if fit_category == "MEDIUM" else "low-fit"
         st.markdown(f'''
             <div class="fit-score {fit_class}">
@@ -759,7 +739,6 @@ def main():
             </div>
         ''', unsafe_allow_html=True)
         
-        # Tabs for different outputs
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📋 Fit Assessment",
             "📄 Revised CV",
@@ -772,7 +751,6 @@ def main():
             st.markdown("### Detailed Fit Assessment")
             st.markdown(assessment)
             
-            # Show breakdown if available
             if 'all_outputs' in st.session_state.results:
                 with st.expander("📊 View Detailed Analysis"):
                     job_analysis = st.session_state.results['all_outputs'].get('Job Description Analyzer', 'N/A')
@@ -816,7 +794,6 @@ def main():
         with tab5:
             st.markdown("### Download All Documents")
             
-            # Create combined document with proper assessment
             combined = f"""# Job Application Package - Generated by AI Assistant
 
 ## Fit Assessment
@@ -849,7 +826,6 @@ def main():
                 mime="text/markdown"
             )
     
-    # Sidebar information
     with st.sidebar:
         st.markdown("### 📖 How It Works")
         st.markdown("""
@@ -873,9 +849,9 @@ def main():
         st.info("Your documents are processed temporarily and not stored permanently.")
         
         st.markdown("---")
-        st.markdown("### 💡 Tips")
+        st.markmarkdown("### 💡 Tips")
         st.markdown("""
-        - Use a well-formatted PDF resume
+        - Use a clear, well-formatted CV in .docx or .txt
         - Include complete job descriptions
         - Review generated materials before sending
         - Adjust based on your authentic voice
