@@ -96,7 +96,14 @@ def save_uploaded_file(uploaded_file) -> str:
     with open(temp_path, 'wb') as f:
         f.write(uploaded_file.getbuffer())
     return temp_path
-
+    
+def save_text_as_markdown(text: str, filename: str) -> str:
+    """Save a text string as a temporary .md file and return its path."""
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, filename)
+    with open(temp_path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return temp_path
 
 def read_file_to_text(file_path: str) -> str:
     """Read .txt, .md, or .docx into a text string."""
