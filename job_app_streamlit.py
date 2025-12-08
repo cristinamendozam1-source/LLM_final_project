@@ -105,7 +105,7 @@ def save_text_as_markdown(text: str, filename: str):
 def create_agents_and_tasks(resume_path: str, job_desc_path: str):
     """Create the multi-agent system with step-by-step workflow"""
     
-    # Initialize tools
+    # Initialize tools (still used for extraction/assessment if configured for your env)
     semantic_pdf = PDFSearchTool()
     semantic_mdx = MDXSearchTool()
     
@@ -198,7 +198,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "- Focus on sharpening language, highlighting relevant achievements, and clarifying impact.\n"
             "- Emphasize the candidate's unique value proposition for this specific role.\n"
         ),
-        tools=[semantic_pdf, semantic_mdx],
+        # No tools: rely on context from previous tasks
         verbose=True,
         backstory=(
             "You are a meticulous CV coach. Rather than rewriting documents, you give precise, "
@@ -230,7 +230,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "   - Ensure employer names are correct for each achievement mentioned\n"
             "3. Closing: Express enthusiasm and request for next steps"
         ),
-        tools=[semantic_pdf, semantic_mdx],
+        # No tools: rely on context
         verbose=True,
         backstory=(
             "You write persuasive yet rigorously honest cover letters. You understand that "
@@ -251,7 +251,7 @@ def create_agents_and_tasks(resume_path: str, job_desc_path: str):
             "3) Check alignment with original documents, "
             "4) Validate that CV feedback is actionable and respectful of candidate constraints."
         ),
-        tools=[semantic_pdf, semantic_mdx],
+        # No tools: rely on context
         verbose=True,
         backstory=(
             "You are the final gatekeeper ensuring quality and integrity. You verify "
@@ -528,7 +528,6 @@ def extract_fit_score(assessment_text: str) -> Tuple[int, str]:
         category = "HIGH"
     elif score >= 50:
         category = "MEDIUM"
-        #
     else:
         category = "LOW"
     
@@ -684,129 +683,4 @@ def main():
         ''', unsafe_allow_html=True)
         
         # Tabs for different outputs
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📋 Fit Assessment",
-            "🛠️ CV Feedback",
-            "✉️ Cover Letter",
-            "✅ QA Report",
-            "💾 Download All"
-        ])
-        
-        with tab1:
-            st.markdown("### Detailed Fit Assessment")
-            st.markdown(assessment)
-            
-            # Show breakdown if available
-            if 'all_outputs' in st.session_state.results:
-                with st.expander("📊 View Detailed Analysis"):
-                    job_analysis = st.session_state.results['all_outputs'].get('Job Description Analyzer', 'N/A')
-                    cv_analysis = st.session_state.results['all_outputs'].get('CV Parser and Analyzer', 'N/A')
-                    
-                    st.markdown("#### Job Requirements Extracted:")
-                    st.markdown(job_analysis)
-                    
-                    st.markdown("---")
-                    
-                    st.markdown("#### Candidate Profile Summary:")
-                    st.info("💡 **Use this to verify accuracy:** Check that the feedback and cover letter match the experiences and employers listed here.")
-                    st.markdown(cv_analysis)
-        
-        with tab2:
-            st.markdown("### Feedback on Your CV")
-            st.info(
-                "🔧 **How to use this:** Go back to your original CV file and apply the suggestions "
-                "manually—especially around ordering, bullet phrasing, and quantification. "
-                "The tool does not overwrite your CV; it guides you on how to improve it."
-            )
-            st.markdown(st.session_state.results['cv_feedback'])
-            st.download_button(
-                label="⬇️ Download CV Feedback",
-                data=st.session_state.results['cv_feedback'],
-                file_name="cv_feedback.md",
-                mime="text/markdown"
-            )
-        
-        with tab3:
-            st.markdown("### Your Cover Letter")
-            st.info("⚠️ **Important:** Verify that all achievements mentioned are attributed to the correct employer. Personalize placeholders like [Your Name] and [Hiring Manager's Name].")
-            st.markdown(st.session_state.results['cover_letter'])
-            st.download_button(
-                label="⬇️ Download Cover Letter",
-                data=st.session_state.results['cover_letter'],
-                file_name="cover_letter.md",
-                mime="text/markdown"
-            )
-        
-        with tab4:
-            st.markdown("### Quality Assurance Report")
-            st.markdown(st.session_state.results.get('qa_report', 'No QA report available'))
-        
-        with tab5:
-            st.markdown("### Download All Documents")
-            
-            combined = f"""# Job Application Package - Generated by AI Assistant
-
-## Fit Assessment
-{assessment}
-
----
-
-## Quality Assurance Report
-{st.session_state.results.get('qa_report', 'No QA report available')}
-
----
-
-## CV Feedback
-{st.session_state.results['cv_feedback']}
-
----
-
-## Cover Letter
-{st.session_state.results['cover_letter']}
-
----
-
-*Generated on {st.session_state.get('generation_date', 'N/A')}*
-"""
-            
-            st.download_button(
-                label="⬇️ Download Complete Package",
-                data=combined,
-                file_name="job_application_package.md",
-                mime="text/markdown"
-            )
-    
-    # Sidebar information
-    with st.sidebar:
-        st.markdown("### 📖 How It Works")
-        st.markdown("""
-        **Step 1: Information Extraction**
-        - Semantic parsing of job description
-        - CV analysis using embeddings
-        
-        **Step 2: Fit Assessment**
-        - Quantitative scoring (0-100%)
-        - Strength/gap identification
-        - Category assignment
-        
-        **Step 3: Tailored Support**
-        - Targeted feedback to improve your existing CV
-        - Factually accurate cover letter for this role
-        """)
-        
-        st.markdown("---")
-        st.markdown("### 🔒 Privacy")
-        st.info("Your documents are processed temporarily and not stored permanently.")
-        
-        st.markdown("---")
-        st.markdown("### 💡 Tips")
-        st.markdown("""
-        - Use a clear, well-formatted CV in .docx or .txt
-        - Include complete job descriptions
-        - Apply the CV feedback directly in your original document
-        - Review generated materials before sending
-        - Adjust language to match your authentic voice
-        """)
-
-if __name__ == "__main__":
-    main()
+        tab1, tab2, tab3, tab4, tab5 = s
